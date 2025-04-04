@@ -1,0 +1,688 @@
+<!--
+  このサイトは以下のサードパーティライブラリを使用しています:
+
+  marked - https://marked.js.org/
+  Copyright (c) 2018+, MarkedJS (https://github.com/markedjs/)
+  MIT License
+
+  DOMPurify - https://github.com/cure53/DOMPurify
+  Copyright (c) 2015 Mario Heiderich
+  Apache License 2.0 または Mozilla Public License 2.0
+
+  ansi-to-html - https://github.com/rburns/ansi-to-html
+  Copyright (c) 2012 Rob Burns
+  MIT License
+-->
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>シンプルテキストツール</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.5/dist/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ansi-to-html@0.7.1/lib/ansi_to_html.min.js"></script>
+
+    <style>
+        /* === 基本スタイル === */
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+            background-color: #36393f;
+            color: #dcddde;
+            line-height: 1.6;
+        }
+        textarea {
+            width: 100%;
+            box-sizing: border-box;
+            height: 250px;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #40444b;
+            color: #dcddde;
+            border: 1px solid #202225;
+            border-radius: 4px;
+            font-size: 16px;
+            resize: vertical;
+            font-family: inherit;
+        }
+        select, input[type="checkbox"], input[type="text"] {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px;
+            margin: 5px 0;
+            background-color: #40444b;
+            color: #dcddde;
+            border: 1px solid #202225;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #5865f2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px 2px;
+            font-size: 16px;
+            transition: background-color 0.2s ease;
+        }
+        button:hover {
+            background-color: #4752c4;
+        }
+        #preview {
+            background-color: #2f3136;
+            padding: 15px 20px;
+            border-radius: 4px;
+            margin-top: 20px;
+            min-height: 150px;
+            overflow-x: auto;
+            border: 1px solid #202225;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .encoding-toggle {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .url-length {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #8e9297;
+        }
+        .format-guide {
+            background-color: #40444b;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+            font-size: 14px;
+            border: 1px solid #2e3035;
+        }
+        .format-guide code {
+            background-color: #2f3136;
+            padding: 0.2em 0.4em;
+            margin: 0;
+            font-size: 85%;
+            border-radius: 3px;
+            font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+        }
+        .title-input {
+            margin-bottom: 10px;
+        }
+        .buttons {
+            margin-top: 10px;
+        }
+
+        /* === Markdownプレビュースタイル === */
+
+        /* 基本要素のリセット */
+        #preview > :first-child { margin-top: 0 !important; }
+        #preview > :last-child { margin-bottom: 0 !important; }
+
+        /* 見出し */
+        #preview h1, #preview h2, #preview h3, #preview h4, #preview h5, #preview h6 {
+            margin-top: 1.5em;
+            margin-bottom: 0.8em;
+            font-weight: 600;
+            line-height: 1.25;
+            color: #ffffff;
+        }
+        #preview h1 { font-size: 2em; border-bottom: 1px solid #4f545c; padding-bottom: 0.3em; }
+        #preview h2 { font-size: 1.5em; border-bottom: 1px solid #4f545c; padding-bottom: 0.3em; }
+        #preview h3 { font-size: 1.25em; }
+        #preview h4 { font-size: 1em; }
+        #preview h5 { font-size: 0.875em; }
+        #preview h6 { font-size: 0.85em; color: #8e9297; }
+
+        /* 段落 */
+        #preview p {
+            margin-top: 0;
+            margin-bottom: 1em;
+        }
+
+        /* 水平線 */
+        #preview hr {
+            height: 4px;
+            padding: 0;
+            margin: 24px 0;
+            background-color: #4f545c;
+            border: 0;
+            border-radius: 2px;
+        }
+
+        /* 引用 */
+        #preview blockquote {
+            margin: 0 0 1em 0;
+            padding: 0.5em 1em;
+            color: #b9bbbe;
+            border-left: 4px solid #4f545c;
+            background-color: #32353b;
+            border-radius: 0 4px 4px 0;
+        }
+        #preview blockquote > :first-child { margin-top: 0; }
+        #preview blockquote > :last-child { margin-bottom: 0; }
+        #preview blockquote blockquote {
+            margin-left: 1em;
+            background-color: #36393f;
+        }
+
+        /* リスト */
+        #preview ul, #preview ol {
+            margin-top: 0;
+            margin-bottom: 1em;
+            padding-left: 2.5em;
+        }
+        #preview ul ul, #preview ol ol, #preview ul ol, #preview ol ul {
+            margin-top: 0.25em;
+            margin-bottom: 0.5em;
+        }
+        #preview li {
+            margin-bottom: 0.4em;
+        }
+        #preview li > p {
+            display: inline;
+        }
+        #preview ul { list-style-type: disc; }
+        #preview ol { list-style-type: decimal; }
+        #preview ul ul { list-style-type: circle; }
+        #preview ol ol { list-style-type: lower-alpha; }
+        #preview ul ul ul { list-style-type: square; }
+        #preview ol ol ol { list-style-type: lower-roman; }
+
+        /* コードブロック */
+        #preview pre {
+            background-color: #202225;
+            border: 1px solid #1a1c1f;
+            padding: 1em;
+            overflow: auto;
+            border-radius: 4px;
+            margin-bottom: 1em;
+            line-height: 1.45;
+        }
+        #preview pre code {
+            background: none;
+            padding: 0;
+            margin: 0;
+            font-size: 0.85em;
+            border-radius: 0;
+            font-family: Consolas, 'Courier New', Courier, monospace;
+            color: #b9bbbe;
+            word-break: normal;
+            white-space: pre;
+            display: block;
+        }
+
+        /* インラインコード */
+        #preview :not(pre) > code {
+            background-color: #202225;
+            border: 1px solid #1a1c1f;
+            padding: 0.2em 0.4em;
+            margin: 0 0.1em;
+            font-size: 0.85em;
+            border-radius: 3px;
+            font-family: Consolas, 'Courier New', Courier, monospace;
+            color: #b9bbbe;
+            white-space: nowrap;
+        }
+
+        /* テーブル */
+        #preview table {
+            display: block;
+            width: max-content;
+            max-width: 100%;
+            overflow: auto;
+            border-collapse: collapse;
+            margin-bottom: 1em;
+            border: 1px solid #4f545c;
+            border-radius: 4px;
+            border-spacing: 0;
+        }
+        #preview th, #preview td {
+            padding: 8px 12px;
+            border: 1px solid #4f545c;
+            text-align: left;
+        }
+        #preview th {
+            font-weight: 600;
+            background-color: #2f3136;
+            color: #ffffff;
+        }
+        #preview tr {
+            background-color: #36393f;
+            border-top: 1px solid #4f545c;
+        }
+        #preview td {
+            color: #dcddde;
+        }
+
+        /* リンク */
+        #preview a {
+            color: #00a8fc;
+            text-decoration: none;
+        }
+        #preview a:hover {
+            text-decoration: underline;
+        }
+
+        /* 画像 */
+        #preview img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin: 0.5em 0;
+            background-color: #2f3136;
+            display: block;
+        }
+
+        /* 打ち消し線 */
+        #preview del {
+            color: #8e9297;
+            text-decoration: line-through;
+        }
+
+        /* スポイラー */
+        #preview span.spoiler {
+            background-color: #202225;
+            color: transparent;
+            padding: 0 4px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out;
+            display: inline-block;
+            position: relative;
+        }
+        #preview span.spoiler::before {
+            content: attr(data-title);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #dcddde;
+            padding: 2px 6px;
+            background-color: rgba(32, 34, 37, 0.8);
+            border-radius: 3px;
+            opacity: 1;
+            transition: opacity 0.3s ease;
+        }
+        #preview span.spoiler.small-title::before {
+            font-size: 12px;
+        }
+        #preview span.spoiler.large-title::before {
+            font-size: 16px;
+        }
+        #preview span.spoiler.revealed {
+            background-color: transparent;
+            color: inherit;
+        }
+        #preview span.spoiler.revealed::before {
+            opacity: 0;
+        }
+        #preview span.spoiler:not(.revealed):hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* タスクリスト */
+        #preview .task-list-item {
+            list-style-type: none;
+            margin-left: -1.5em;
+            position: relative;
+            padding-left: 1.8em;
+            min-height: 1.5em;
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 0.5em;
+        }
+        #preview .task-list-item input[type="checkbox"] {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            width: 1.2em;
+            height: 1.2em;
+            border: 2px solid #72767d;
+            border-radius: 4px;
+            background-color: #40444b;
+            cursor: default;
+            margin-top: 0.15em;
+            margin-right: 0.6em;
+            flex-shrink: 0;
+            position: relative;
+            vertical-align: top;
+            display: inline-block;
+        }
+        #preview .task-list-item input[type="checkbox"]:checked {
+            background-color: #5865f2;
+            border-color: #5865f2;
+        }
+        #preview .task-list-item input[type="checkbox"]:checked::before {
+            content: '';
+            display: block;
+            width: 0.3em;
+            height: 0.6em;
+            border: solid #dcddde;
+            border-width: 0 0.2em 0.2em 0;
+            transform: rotate(45deg) translate(-50%, -60%);
+            position: absolute;
+            left: 50%;
+            top: 50%;
+        }
+        #preview .task-list-item input[type="checkbox"]:focus {
+            outline: none;
+            box-shadow: 0 0 0 0.2em rgba(88, 101, 242, 0.5);
+        }
+        #preview .task-list-item input[type="checkbox"]:checked + span,
+        #preview .task-list-item input[type="checkbox"]:checked + label {
+            color: #8e9297;
+            text-decoration: line-through;
+        }
+        #preview .task-list-item > span,
+        #preview .task-list-item > label {
+            margin-top: 0.05em;
+            line-height: 1.3;
+            color: #dcddde;
+        }
+    </style>
+</head>
+<body>
+<h1>シンプルテキストツール</h1>
+
+<div class="title-input">
+    <input type="text" id="title-field" placeholder="タイトル (省略可能)">
+</div>
+
+<textarea id="input" placeholder="テキストをMarkdown形式で入力してください...
+例:
+# 見出し
+- リスト項目
+[リンク](http://example.com)"></textarea>
+
+<div class="controls">
+    <select id="user-select">
+        <option value="0">-- 発言者を選択 --</option>
+    </select>
+    <select id="feel-select">
+        <option value="0">-- 感情を選択 --</option>
+    </select>
+    <select id="action-select">
+        <option value="0">-- 動作を選択 --</option>
+    </select>
+    <select id="ending-select">
+        <option value="0">-- 末尾を選択 --</option>
+    </select>
+</div>
+
+<div class="encoding-toggle">
+    <label>
+        <input type="radio" name="encoding" value="utf8" checked> 日本語そのまま (短いURL)
+    </label>
+    <label>
+        <input type="radio" name="encoding" value="base64"> Base64エンコード (長いURL)
+    </label>
+</div>
+
+<div class="buttons">
+    <button id="preview-btn">プレビュー</button>
+    <button id="share-btn">共有URL生成</button>
+</div>
+
+<div id="preview">プレビューエリア</div>
+<div id="url-length" class="url-length"></div>
+
+<div class="format-guide">
+    <h3>Markdown書式ガイド:</h3>
+    <p><code># H1</code>, <code>## H2</code>, <code>### H3</code> など: 見出し</p>
+    <p><code>- リスト</code>, <code>* リスト</code>, <code>+ リスト</code>: 箇条書きリスト (ネスト可)</p>
+    <p><code>1. 番号付きリスト</code>: 番号付きリスト (ネスト可)</p>
+    <p><code>> 引用</code>: 引用</p>
+    <p><code>```言語名
+        コード
+        ```</code>: コードブロック (言語名は省略可)</p>
+    <p><code>`インラインコード`</code>: インラインコード</p>
+    <p><code>**太字**</code> または <code>__太字__</code>: 太字</p>
+    <p><code>*イタリック*</code> または <code>_イタリック_</code>: イタリック</p>
+    <p><code>~~打ち消し線~~</code>: 打ち消し線</p>
+    <p><code>[リンクテキスト](URL)</code>: リンク</p>
+    <p><code>![代替テキスト](画像URL)</code>: 画像</p>
+    <p><code>| Th1 | Th2 |
+        |---|---|
+        | Td1 | Td2 |</code>: テーブル</p>
+    <p><code>- [ ] 未完了タスク</code>, <code>- [x] 完了タスク</code>: タスクリスト</p>
+    <p><code>---</code> または <code>***</code> または <code>___</code>: 水平線</p>
+    <p><code>||スポイラーテキスト||</code>: スポイラー (独自拡張)</p>
+    <p><em>(注意: 数式は現在サポートされていません)</em></p>
+</div>
+
+<script type="module">
+    import SimpleTextProcessor from './simple-text-processor.js';
+
+    // --- グローバル変数 ---
+    const processor = new SimpleTextProcessor();
+    let expressionsData = null;
+
+    // --- marked の設定 ---
+    const previewRenderer = new marked.Renderer();
+
+    // タスクリスト
+    previewRenderer.listitem = function(text, task, checked) {
+        if (task) {
+            const checkboxHtml = `<input type="checkbox" disabled ${checked ? 'checked' : ''}> `;
+            const cleanedText = text.replace(/<label>|<\/label>/g, '');
+            const itemClass = checked ? 'task-list-item task-list-item-checked' : 'task-list-item';
+            return `<li class="${itemClass}">${checkboxHtml}<span>${cleanedText}</span></li>`;
+        }
+        return `<li>${text}</li>`;
+    };
+
+    marked.setOptions({
+        renderer: previewRenderer,
+        gfm: true,
+        breaks: true,
+        pedantic: false,
+        smartLists: true,
+        smartypants: false,
+    });
+
+    // スポイラー拡張
+    const spoilerExtension = {
+        name: 'spoiler',
+        level: 'inline',
+        start(src) { return src.match(/\|\|/)?.index; },
+        tokenizer(src, tokens) {
+            const rule = /^\|\|(\[([^\]]+)\])?([\s\S]+?)\|\|/;
+            const match = rule.exec(src);
+            if (match) {
+                const title = match[2] || '';
+                const textTokens = this.lexer.inlineTokens(match[3].trim());
+                return { type: 'spoiler', raw: match[0], title, tokens: textTokens };
+            }
+        },
+        renderer(token) {
+            const titleAttr = token.title ? ` data-title="${token.title}"` : '';
+            const isLargeTitle = token.raw.startsWith('||') && token.raw.endsWith(`[${token.title}]||`);
+            const sizeClass = isLargeTitle ? 'large-title' : 'small-title';
+            return `<span class="spoiler ${sizeClass}"${titleAttr}>${this.parser.parseInline(token.tokens)}</span>`;
+        }
+    };
+    marked.use({ extensions: [spoilerExtension] });
+
+    // --- 初期化処理 ---
+    async function init() {
+        try {
+            expressionsData = await processor.loadExpressions();
+            processor.expressionsData = expressionsData;
+            console.log("Expressions loaded successfully.");
+        } catch (error) {
+            console.error("Failed to load expressions:", error);
+            expressionsData = {
+                users: { '0': '未設定' }, feels: { '0': '未設定' },
+                actions: { '0': '未設定' }, endings: { '0': '未設定', '1': '。' }
+            };
+            processor.expressionsData = expressionsData;
+        }
+        populateSelects();
+        setupEventListeners();
+        updatePreview();
+        updateURLLengthComparison();
+    }
+
+    // --- ドロップダウンリスト設定 ---
+    function populateSelects() {
+        if (!expressionsData) return;
+        const selects = {
+            'user-select': expressionsData.users, 'feel-select': expressionsData.feels,
+            'action-select': expressionsData.actions, 'ending-select': expressionsData.endings
+        };
+        Object.entries(selects).forEach(([id, options]) => {
+            const select = document.getElementById(id);
+            if (!select) return;
+            select.innerHTML = '';
+            if (typeof options !== 'object' || options === null) {
+                options = { '0': '読込失敗' };
+            }
+            Object.entries(options).forEach(([value, text]) => {
+                if (text !== 'none-date') {
+                    const displayText = (value === '0') ? `-- ${id.replace('-select', '')}を選択 --` : text;
+                    select.add(new Option(displayText, value));
+                }
+            });
+            select.value = '0';
+        });
+    }
+
+    // --- イベントリスナー設定 ---
+    function setupEventListeners() {
+        const input = document.getElementById('input');
+        const titleField = document.getElementById('title-field');
+        const previewBtn = document.getElementById('preview-btn');
+        const shareBtn = document.getElementById('share-btn');
+        const controls = document.querySelectorAll('select');
+        const previewArea = document.getElementById('preview');
+        const encodingRadios = document.querySelectorAll('input[name="encoding"]');
+
+        const updateAll = () => { updatePreview(); updateURLLengthComparison(); };
+
+        previewBtn.addEventListener('click', updatePreview);
+        shareBtn.addEventListener('click', generateShareURL);
+        input.addEventListener('input', updateAll);
+        titleField.addEventListener('input', updateAll);
+        controls.forEach(control => control.addEventListener('change', updateAll));
+        encodingRadios.forEach(radio => radio.addEventListener('change', updateURLLengthComparison));
+
+        // スポイラークリック処理
+        previewArea.addEventListener('click', function(e) {
+            const spoilerElement = e.target.closest('span.spoiler');
+            if (spoilerElement) {
+                spoilerElement.classList.toggle('revealed');
+            }
+        });
+    }
+
+    // --- プレビュー更新 ---
+    function updatePreview() {
+        const input = document.getElementById('input');
+        const titleValue = document.getElementById('title-field').value.trim();
+        const metadata = processor.createMetadata(
+            document.getElementById('user-select').value,
+            document.getElementById('feel-select').value,
+            document.getElementById('action-select').value,
+            document.getElementById('ending-select').value
+        );
+        const preview = document.getElementById('preview');
+
+        // Markdown部分のコンテンツを作成
+        let markdownContent = input.value;
+        if (titleValue) {
+            markdownContent = `# ${titleValue}\n\n${markdownContent}`;
+        }
+
+        // MarkdownをHTMLに変換
+        let htmlContent = marked.parse(markdownContent);
+        htmlContent = DOMPurify.sanitize(htmlContent);
+
+        // メタデータ部分のテキストを生成
+        const metadataSuffix = processor.formatPreview('', metadata, '');
+
+        // プレビューエリアにHTMLを挿入
+        if (metadataSuffix.trim()) {
+            preview.innerHTML = htmlContent + `<div class="metadata-suffix">${metadataSuffix}</div>`;
+        } else {
+            preview.innerHTML = htmlContent;
+        }
+    }
+
+    // --- URL長さ比較更新 ---
+    function updateURLLengthComparison() {
+        const input = document.getElementById('input');
+        const titleValue = document.getElementById('title-field').value.trim();
+        const text = input.value;
+        const urlLengthDiv = document.getElementById('url-length');
+
+        if (!text.trim() && !titleValue.trim()) {
+            urlLengthDiv.textContent = ''; return;
+        }
+
+        const metadata = processor.createMetadata(
+            document.getElementById('user-select').value,
+            document.getElementById('feel-select').value,
+            document.getElementById('action-select').value,
+            document.getElementById('ending-select').value
+        );
+
+        try {
+            const utf8Url = processor.createShareableURL(text, metadata, false, titleValue);
+            const base64Url = processor.createShareableURL(text, metadata, true, titleValue);
+            const utf8Length = utf8Url.length;
+            const base64Length = base64Url.length;
+
+            if (isNaN(utf8Length) || isNaN(base64Length)) { throw new Error("Length calculation failed"); }
+
+            const diff = base64Length - utf8Length;
+            const percent = utf8Length > 0 ? ((base64Length / utf8Length) * 100 - 100).toFixed(0) : 0;
+            urlLengthDiv.textContent = `URL長さ比較: 通常 ${utf8Length}文字 vs Base64 ${base64Length}文字 (${diff >= 0 ? '+' : ''}${diff}文字, ${percent}% ${diff >= 0 ? '増' : '減'})`;
+        } catch (error) {
+            console.error("Error calculating URL lengths:", error);
+            urlLengthDiv.textContent = 'URL長さ: 計算エラー';
+        }
+    }
+
+    // --- 共有URL生成 ---
+    async function generateShareURL() {
+        const input = document.getElementById('input');
+        const titleValue = document.getElementById('title-field').value.trim();
+        const text = input.value;
+        const useBase64 = document.querySelector('input[name="encoding"]:checked').value === 'base64';
+
+        if (!text.trim() && !titleValue.trim()) {
+            alert('テキストまたはタイトルを入力してください。'); return;
+        }
+
+        const metadata = processor.createMetadata(
+            document.getElementById('user-select').value,
+            document.getElementById('feel-select').value,
+            document.getElementById('action-select').value,
+            document.getElementById('ending-select').value
+        );
+
+        try {
+            const { url, message } = await processor.generateShareURL(text, metadata, useBase64, titleValue);
+            alert(message || '共有URLをクリップボードにコピーしました！');
+        } catch (error) {
+            console.error('共有URL生成エラー:', error);
+            alert(`URLの生成またはコピーに失敗しました。\n${error.message}`);
+        }
+    }
+
+    // --- 初期化実行 ---
+    init();
+</script>
+</body>
+</html>

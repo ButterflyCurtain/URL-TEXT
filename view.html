@@ -1,0 +1,493 @@
+<!--
+  このサイトは以下のサードパーティライブラリを使用しています:
+
+  marked - https://marked.js.org/
+  Copyright (c) 2018+, MarkedJS (https://github.com/markedjs/)
+  MIT License
+
+  highlight.js - https://highlightjs.org/
+  Copyright (c) 2006, Ivan Sagalaev
+  BSD 3-Clause License
+
+  DOMPurify - https://github.com/cure53/DOMPurify
+  Copyright (c) 2015 Mario Heiderich
+  Apache License 2.0 または Mozilla Public License 2.0
+
+  ansi-to-html - https://github.com/rburns/ansi-to-html
+  Copyright (c) 2012 Rob Burns
+  MIT License
+-->
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>テキストビューワー</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.5/dist/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ansi-to-html@0.7.1/lib/ansi_to_html.min.js"></script>
+
+    <style>
+        /* === 基本スタイル === */
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+            background-color: #36393f;
+            color: #dcddde;
+            line-height: 1.6;
+        }
+        .container {
+            background-color: #2f3136;
+            padding: 20px 25px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border: 1px solid #202225;
+        }
+        .title {
+            font-size: 1.8em;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #4f545c;
+        }
+        .content {
+            font-size: 16px;
+            word-wrap: break-word;
+        }
+        .footer {
+            margin-top: 25px;
+            padding-top: 15px;
+            border-top: 1px dashed #4f545c;
+            color: #8e9297;
+            font-size: 0.9em;
+            text-align: right;
+        }
+        .error {
+            color: #f04747;
+            padding: 15px;
+            background-color: #40444b;
+            border: 1px solid #f04747;
+            border-radius: 4px;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+
+        /* === Markdown要素スタイル === */
+        .content h1, .content h2, .content h3, .content h4, .content h5, .content h6 {
+            margin-top: 1.5em;
+            margin-bottom: 0.8em;
+            font-weight: 600;
+            line-height: 1.25;
+            color: #ffffff;
+        }
+        .content h1 { font-size: 2em; border-bottom: 1px solid #4f545c; padding-bottom: 0.3em; }
+        .content h2 { font-size: 1.5em; border-bottom: 1px solid #4f545c; padding-bottom: 0.3em; }
+        .content h3 { font-size: 1.25em; }
+        .content h4 { font-size: 1em; }
+        .content h5 { font-size: 0.875em; }
+        .content h6 { font-size: 0.85em; color: #8e9297; }
+        .content > :first-child { margin-top: 0 !important; }
+        .content p { margin-bottom: 1em; }
+        .content hr { height: 4px; padding: 0; margin: 24px 0; background-color: #4f545c; border: 0; border-radius: 2px; }
+        .content blockquote { margin: 0 0 1em 0; padding: 0.5em 1em; color: #b9bbbe; border-left: 4px solid #4f545c; background-color: #32353b; border-radius: 0 4px 4px 0; }
+        .content blockquote > :first-child { margin-top: 0; }
+        .content blockquote > :last-child { margin-bottom: 0; }
+        .content ul, .content ol { margin-top: 0; margin-bottom: 1em; padding-left: 2.5em; }
+        .content ul ul, .content ol ol, .content ul ol, .content ol ul { margin-top: 0.25em; margin-bottom: 0.5em; }
+        .content li { margin-bottom: 0.4em; }
+        .content li > p { display: inline; }
+        .content a { color: #00a8fc; text-decoration: none; }
+        .content a:hover { text-decoration: underline; }
+        .content img { max-width: 100%; height: auto; border-radius: 4px; margin: 0.5em 0; background-color: #2f3136; display: block; }
+        .content del { color: #8e9297; text-decoration: line-through; }
+
+        /* コードブロック */
+        .content pre.code-block {
+            position: relative;
+            background-color: #202225;
+            border: 1px solid #1a1c1f;
+            padding: 0;
+            overflow: auto;
+            border-radius: 4px;
+            margin-bottom: 1em;
+        }
+        .content pre.code-block code.hljs {
+            padding: 1em;
+            background: #202225;
+            color: #b9bbbe;
+            font-family: Consolas, 'Courier New', Courier, monospace;
+            font-size: 0.85em;
+            line-height: 1.45;
+        }
+        .content .copy-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: #5865f2;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.2s ease;
+        }
+        .content .copy-btn:hover {
+            background-color: #4752c4;
+        }
+
+        /* インラインコード */
+        .content :not(pre) > code {
+            background-color: #202225;
+            border: 1px solid #1a1c1f;
+            padding: 0.2em 0.4em;
+            margin: 0 0.1em;
+            font-size: 0.85em;
+            border-radius: 3px;
+            font-family: Consolas, 'Courier New', Courier, monospace;
+            color: #b9bbbe;
+            white-space: nowrap;
+        }
+
+        /* スポイラー */
+        .content span.spoiler {
+            background-color: #202225;
+            color: transparent;
+            padding: 0 4px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out;
+            display: inline-block;
+            position: relative;
+        }
+        .content span.spoiler::before {
+            content: attr(data-title);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #dcddde;
+            padding: 2px 6px;
+            background-color: rgba(32, 34, 37, 0.8);
+            border-radius: 3px;
+            opacity: 1;
+            transition: opacity 0.3s ease;
+        }
+        .content span.spoiler.small-title::before {
+            font-size: 12px;
+        }
+        .content span.spoiler.large-title::before {
+            font-size: 16px;
+        }
+        .content span.spoiler.revealed {
+            background-color: transparent;
+            color: inherit;
+        }
+        .content span.spoiler.revealed::before {
+            opacity: 0;
+        }
+        .content span.spoiler:not(.revealed):hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* メディア用スポイラー */
+        .content .media-spoiler {
+            position: relative;
+            display: inline-block;
+            overflow: hidden;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .content .media-spoiler img,
+        .content .media-spoiler iframe {
+            display: block;
+            max-width: 100%;
+            filter: blur(5px);
+            opacity: 0.6;
+            transition: filter 0.3s ease, opacity 0.3s ease;
+        }
+        .content .media-spoiler .spoiler-button {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(32, 34, 37, 0.8);
+            color: #dcddde;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            text-align: center;
+            transition: opacity 0.3s ease;
+            z-index: 1;
+        }
+        .content .media-spoiler.revealed img,
+        .content .media-spoiler.revealed iframe {
+            filter: blur(0);
+            opacity: 1;
+        }
+        .content .media-spoiler.revealed .spoiler-button {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* タスクリスト */
+        .content .task-list-item {
+            list-style-type: none;
+            margin-left: -1.5em;
+            position: relative;
+            padding-left: 1.8em;
+            min-height: 1.5em;
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 0.5em;
+        }
+        .content .task-list-item input[type="checkbox"] {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            width: 1.2em;
+            height: 1.2em;
+            border: 2px solid #72767d;
+            border-radius: 4px;
+            background-color: #40444b;
+            cursor: default;
+            margin-top: 0.15em;
+            margin-right: 0.6em;
+            flex-shrink: 0;
+            position: relative;
+            vertical-align: top;
+            display: inline-block;
+        }
+        .content .task-list-item input[type="checkbox"]:checked {
+            background-color: #5865f2;
+            border-color: #5865f2;
+        }
+        .content .task-list-item input[type="checkbox"]:checked::before {
+            content: '';
+            display: block;
+            width: 0.3em;
+            height: 0.6em;
+            border: solid #dcddde;
+            border-width: 0 0.2em 0.2em 0;
+            transform: rotate(45deg) translate(-50%, -60%);
+            position: absolute;
+            left: 50%;
+            top: 50%;
+        }
+        .content .task-list-item input[type="checkbox"]:focus {
+            outline: none;
+            box-shadow: 0 0 0 0.2em rgba(88, 101, 242, 0.5);
+        }
+        .content .task-list-item input[type="checkbox"]:checked + span,
+        .content .task-list-item input[type="checkbox"]:checked + label {
+            color: #8e9297;
+            text-decoration: line-through;
+        }
+        .content .task-list-item > span,
+        .content .task-list-item > label {
+            margin-top: 0.05em;
+            line-height: 1.3;
+            color: #dcddde;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="title" class="title" style="display: none;"></div>
+    <div id="content" class="content">読み込み中...</div>
+    <div id="footer" class="footer"></div>
+</div>
+
+<script type="module">
+    import SimpleTextProcessor from './simple-text-processor.js';
+    const processor = new SimpleTextProcessor();
+
+    // --- marked.js の設定 ---
+    const viewRenderer = new marked.Renderer();
+
+    // タスクリスト
+    viewRenderer.listitem = function(text, task, checked) {
+        if (task) {
+            const checkboxHtml = `<input type="checkbox" disabled ${checked ? 'checked' : ''}> `;
+            const cleanedText = text.replace(/<label>|<\/label>/g, '');
+            const itemClass = checked ? 'task-list-item task-list-item-checked' : 'task-list-item';
+            return `<li class="${itemClass}">${checkboxHtml}<span>${cleanedText}</span></li>`;
+        }
+        return `<li>${text}</li>`;
+    };
+
+    // コードブロック
+    viewRenderer.code = function(code, infostring, escaped) {
+        const lang = (infostring || '').match(/\S*/)[0];
+        if (lang === 'ansi') {
+            const converter = new AnsiToHtml();
+            const html = converter.toHtml(code);
+            return `<pre class="code-block"><code class="hljs language-ansi">${html}</code><button class="copy-btn">コピー</button></pre>`;
+        }
+        const shouldRenderHtml = lang && lang.endsWith('!');
+        const actualLang = lang ? lang.replace(/!$/, '') : '';
+        if (shouldRenderHtml && actualLang === 'html') {
+            const sanitizedHtml = DOMPurify.sanitize(code, { USE_PROFILES: { html: true } });
+            return `<div class="rendered-html-block">${sanitizedHtml}</div>`;
+        }
+        let highlightedCode;
+        if (hljs.getLanguage(actualLang)) {
+            highlightedCode = hljs.highlight(code, { language: actualLang }).value;
+        } else {
+            highlightedCode = hljs.highlightAuto(code).value;
+        }
+        return `<pre class="code-block"><code class="hljs language-${actualLang}">${highlightedCode}</code><button class="copy-btn">コピー</button></pre>`;
+    };
+
+    marked.setOptions({
+        renderer: viewRenderer,
+        gfm: true,
+        breaks: true,
+        pedantic: false,
+        smartLists: true,
+        smartypants: false,
+    });
+
+    // スポイラー拡張
+    const spoilerExtension = {
+        name: 'spoiler',
+        level: 'inline',
+        start(src) { return src.match(/\|\|/)?.index; },
+        tokenizer(src, tokens) {
+            const rule = /^\|\|(\[([^\]]+)\])?([\s\S]+?)\|\|/;
+            const match = rule.exec(src);
+            if (match) {
+                const title = match[2] || '';
+                const textTokens = this.lexer.inlineTokens(match[3].trim());
+                return { type: 'spoiler', raw: match[0], title, tokens: textTokens };
+            }
+        },
+        renderer(token) {
+            const titleAttr = token.title ? ` data-title="${token.title}"` : '';
+            const isLargeTitle = token.raw.startsWith('||') && token.raw.endsWith(`[${token.title}]||`);
+            const sizeClass = isLargeTitle ? 'large-title' : 'small-title';
+            return `<span class="spoiler ${sizeClass}"${titleAttr}>${this.parser.parseInline(token.tokens)}</span>`;
+        }
+    };
+    marked.use({ extensions: [spoilerExtension] });
+
+    // --- 初期化処理 ---
+    async function init() {
+        const contentElement = document.getElementById('content');
+        const footerElement = document.getElementById('footer');
+        const titleElement = document.getElementById('title');
+
+        try {
+            await processor.loadExpressions();
+            const hash = window.location.hash;
+            if (!hash || hash.length < 2) {
+                showError('表示するデータが見つかりません。URLを確認してください。');
+                return;
+            }
+            const data = processor.parseShareableURL(hash);
+            if (!data) {
+                showError('URLの形式が無効か、データのデコードに失敗しました。');
+                return;
+            }
+
+            // タイトル表示
+            if (data.title && data.title.trim()) {
+                const titleHtml = DOMPurify.sanitize(marked.parseInline(data.title.trim()));
+                titleElement.innerHTML = titleHtml;
+                titleElement.style.display = 'block';
+            } else {
+                titleElement.style.display = 'none';
+            }
+
+            // メインコンテンツの処理
+            let rawHtml = marked.parse(data.text || '');
+            let sanitizedHtml = DOMPurify.sanitize(rawHtml);
+            contentElement.innerHTML = sanitizedHtml;
+
+            // スポイラー処理
+            processSpoilers(contentElement);
+
+            // コードブロックのハイライト
+            contentElement.querySelectorAll('pre code').forEach(block => {
+                hljs.highlightElement(block);
+            });
+
+            // スポイラークリック処理
+            setupSpoilerClickHandlers(contentElement);
+
+            // フッター表示
+            const footerText = `${data.metadata.user || ''}${data.metadata.feel || ''}${data.metadata.action || ''}${data.metadata.ending || ''}`;
+            footerElement.textContent = footerText.trim() ? `と、${footerText}` : '';
+
+        } catch (error) {
+            console.error('表示処理中にエラー:', error);
+            showError(`エラーが発生しました: ${error.message}`);
+        }
+    }
+
+    // --- スポイラー処理関数 ---
+    function processSpoilers(parentElement) {
+        parentElement.querySelectorAll('.spoiler').forEach(spoiler => {
+            const images = spoiler.querySelectorAll('img');
+            const iframes = spoiler.querySelectorAll('iframe');
+            images.forEach(img => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'media-spoiler';
+                wrapper.innerHTML = `${img.outerHTML}<div class="spoiler-button">${spoiler.dataset.title || 'スポイラー'}<br>(-解除-)</div>`;
+                img.replaceWith(wrapper);
+            });
+            iframes.forEach(iframe => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'media-spoiler';
+                wrapper.innerHTML = `${iframe.outerHTML}<div class="spoiler-button">${spoiler.dataset.title || 'スポイラー'}<br>(-解除-)</div>`;
+                iframe.replaceWith(wrapper);
+            });
+        });
+    }
+
+    // --- スポイラークリック処理関数 ---
+    function setupSpoilerClickHandlers(parentElement) {
+        parentElement.addEventListener('click', function(e) {
+            const spoilerElement = e.target.closest('.spoiler, .media-spoiler');
+            if (spoilerElement) {
+                spoilerElement.classList.toggle('revealed');
+            }
+        });
+    }
+
+    // --- エラー表示関数 ---
+    function showError(message) {
+        const contentElement = document.getElementById('content');
+        const titleElement = document.getElementById('title');
+        const footerElement = document.getElementById('footer');
+        titleElement.style.display = 'none';
+        footerElement.style.display = 'none';
+        contentElement.innerHTML = `<div class="error">${message}</div>`;
+    }
+
+    // --- コードコピー機能 ---
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('copy-btn')) {
+            const codeElement = e.target.previousElementSibling;
+            const codeText = codeElement.textContent;
+            navigator.clipboard.writeText(codeText).then(() => {
+                alert('コードをクリップボードにコピーしました！');
+            }).catch(err => {
+                console.error('コピーに失敗しました:', err);
+            });
+        }
+    });
+
+    // --- 初期化実行 ---
+    init();
+</script>
+</body>
+</html>
