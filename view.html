@@ -379,15 +379,25 @@
     };
     marked.use({ extensions: [spoilerExtension] });
 
+    // --- 履歴管理と確認設定 ---
+    let hashHistory = []; // ハッシュ履歴
+    let historyIndex = -1; // 現在の履歴位置
+    let showConfirm = true; // 確認ダイアログを表示するかどうか
+
+    // 確認ダイアログの設定を簡単に切り替え
+    function toggleConfirmDialog(enable) {
+        showConfirm = enable;
+        console.log(`確認ダイアログ: ${showConfirm ? '有効' : '無効'}`);
+    }
+
     // --- 初期化処理 ---
-    async function init() {
+    async function init(hash = window.location.hash) {
         const contentElement = document.getElementById('content');
         const footerElement = document.getElementById('footer');
         const titleElement = document.getElementById('title');
 
         try {
             await processor.loadExpressions();
-            const hash = window.location.hash;
             if (!hash || hash.length < 2) {
                 showError('表示するデータが見つかりません。URLを確認してください。');
                 return;
@@ -486,8 +496,61 @@
         }
     });
 
+    // --- ハッシュ変更の監視と確認 ---
+    window.addEventListener('hashchange', function(e) {
+        const newHash = window.location.hash;
+        const oldHash = e.oldURL ? e.oldURL.split('#')[1] || '' : hashHistory[historyIndex] || '';
+
+        if (newHash === oldHash) return; // 同じ場合は何もしない
+
+        if (showConfirm) {
+            const confirmed = confirm('移動しますか？');
+            if (!confirmed) {
+                // キャンセルされた場合、元のハッシュに戻す
+                window.location.hash = oldHash;
+                return;
+            }
+        }
+
+        // 履歴に追加
+        if (historyIndex < hashHistory.length - 1) {
+            hashHistory = hashHistory.slice(0, historyIndex + 1); // 未来の履歴を削除
+        }
+        hashHistory.push(newHash);
+        historyIndex++;
+
+        console.log('ハッシュが変更されました:', newHash);
+        init(newHash); // 新しいハッシュで更新
+    });
+
+    // --- 履歴操作（Ctrl+Z と Ctrl+Y） ---　今後実装する
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.key === 'z' && historyIndex > 0) {
+            e.preventDefault();
+            historyIndex--;
+            window.location.hash = hashHistory[historyIndex];
+            init(hashHistory[historyIndex]);
+            console.log('戻る:', hashHistory[historyIndex]);
+        } else if (e.ctrlKey && e.key === 'y' && historyIndex < hashHistory.length - 1) {
+            e.preventDefault();
+            historyIndex++;
+            window.location.hash = hashHistory[historyIndex];
+            init(hashHistory[historyIndex]);
+            console.log('進む:', hashHistory[historyIndex]);
+        }
+    });
+
     // --- 初期化実行 ---
-    init();
+    (function() {
+        const initialHash = window.location.hash || '#u=初期テキスト'; // デフォルトハッシュ
+        hashHistory.push(initialHash);
+        historyIndex = 0;
+        init(initialHash);
+    })();
+
+    // 確認ダイアログの切り替え例（コンソールで実行可能）
+    // toggleConfirmDialog(false); // 確認なしに切り替え
+    // toggleConfirmDialog(true);  // 確認ありに戻す
 </script>
 </body>
 </html>
