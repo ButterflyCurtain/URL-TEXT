@@ -523,7 +523,7 @@
         init(newHash); // 新しいハッシュで更新
     });
 
-    // --- 履歴操作（Ctrl+Z と Ctrl+Y） ---　今後実装する
+    // --- 履歴操作（Ctrl+Z と Ctrl+Y） ---
     document.addEventListener('keydown', function(e) {
         if (e.ctrlKey && e.key === 'z' && historyIndex > 0) {
             e.preventDefault();
