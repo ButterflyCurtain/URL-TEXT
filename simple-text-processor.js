@@ -52,13 +52,7 @@ class SimpleTextProcessor {
     // URLセーフデコーディング（日本語文字対応）
     decodeURLSafe(str) {
         try {
-            if (/%[0-9A-F]{2}/i.test(str)) {
-                return decodeURIComponent(str.replace(/\+/g, ' '));
-            }
-            if (/[A-Za-z0-9\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(str)) {
-                return str.replace(/\+/g, ' ');
-            }
-            return decodeURIComponent(str.replace(/\+/g, ' '));
+            return decodeURIComponent(str);
         } catch (e) {
             console.error('デコードエラー:', e);
             return str;
