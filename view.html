@@ -350,6 +350,14 @@
         .content .spoiler-marker {
             display: none;
         }
+
+        /* === カスタムハイライト === */
+        mark.custom-highlight {
+            background-color: #5865f2;
+            color: #ffffff;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+        }
     </style>
 </head>
 <body>
@@ -361,412 +369,528 @@
 </div>
 
 <script type="module">
-    import SimpleTextProcessor from './simple-text-processor.js';
-    const processor = new SimpleTextProcessor();
+import SimpleTextProcessor from './simple-text-processor.js';
+const processor = new SimpleTextProcessor();
 
-    // --- marked.js の設定 ---
-    const viewRenderer = new marked.Renderer();
+// --- marked.js の設定 ---
+const viewRenderer = new marked.Renderer();
 
-    // タスクリスト
-    viewRenderer.listitem = function(text, task, checked) {
-        if (task) {
-            const checkboxHtml = `<input type="checkbox" disabled ${checked ? 'checked' : ''}> `;
-            const cleanedText = text.replace(/<label>|<\/label>/g, '');
-            const itemClass = checked ? 'task-list-item task-list-item-checked' : 'task-list-item';
-            return `<li class="${itemClass}">${checkboxHtml}<span>${cleanedText}</span></li>`;
+// タスクリスト
+viewRenderer.listitem = function(text, task, checked) {
+    if (task) {
+        const checkboxHtml = `<input type="checkbox" disabled ${checked ? 'checked' : ''}> `;
+        const cleanedText = text.replace(/<label>|<\/label>/g, '');
+        const itemClass = checked ? 'task-list-item task-list-item-checked' : 'task-list-item';
+        return `<li class="${itemClass}">${checkboxHtml}<span>${cleanedText}</span></li>`;
+    }
+    return `<li>${text}</li>`;
+};
+
+// コードブロック
+viewRenderer.code = function(code, infostring, escaped) {
+    const lang = (infostring || '').match(/\S*/)[0];
+    if (lang === 'ansi') {
+        const converter = new AnsiToHtml();
+        const html = converter.toHtml(code);
+        return `<pre class="code-block"><code class="hljs language-ansi">${html}</code><button class="copy-btn">コピー</button></pre>`;
+    }
+    const shouldRenderHtml = lang && lang.endsWith('!');
+    const actualLang = lang ? lang.replace(/!$/, '') : '';
+    if (shouldRenderHtml && actualLang === 'html') {
+        const sanitizedHtml = DOMPurify.sanitize(code, { USE_PROFILES: { html: true } });
+        return `<div class="rendered-html-block">${sanitizedHtml}</div>`;
+    }
+    let highlightedCode;
+    if (hljs.getLanguage(actualLang)) {
+        highlightedCode = hljs.highlight(code, { language: actualLang }).value;
+    } else {
+        highlightedCode = hljs.highlightAuto(code).value;
+    }
+    return `<pre class="code-block"><code class="hljs language-${actualLang}">${highlightedCode}</code><button class="copy-btn">コピー</button></pre>`;
+};
+
+marked.setOptions({
+    renderer: viewRenderer,
+    gfm: true,
+    breaks: true,
+    pedantic: false,
+    smartLists: true,
+    smartypants: false,
+});
+
+// スポイラー拡張
+const spoilerExtension = {
+    name: 'spoiler',
+    level: 'inline',
+    start(src) { return src.match(/\|\|/)?.index; },
+    tokenizer(src, tokens) {
+        const rule = /^\|\|(\[([^\]]+)\])?([\s\S]+?)\|\|/;
+        const match = rule.exec(src);
+        if (match) {
+            const title = match[2] || '';
+            const textTokens = this.lexer.inlineTokens(match[3].trim());
+            return { type: 'spoiler', raw: match[0], title, tokens: textTokens };
         }
-        return `<li>${text}</li>`;
-    };
+    },
+    renderer(token) {
+        // AI・支援技術向けにスポイラー範囲を明示
+        const titleAttr = token.title ? ` data-title="${token.title}"` : '';
+        const isLargeTitle = token.raw.startsWith('||') && token.raw.endsWith(`[${token.title}]||`);
+        const sizeClass = isLargeTitle ? 'large-title' : 'small-title';
+        return `<span class="spoiler ${sizeClass}"${titleAttr}><span class="spoiler-marker" aria-hidden="true">[SPOILER-START]</span>${this.parser.parseInline(token.tokens)}<span class="spoiler-marker" aria-hidden="true">[SPOILER-END]</span></span>`;
+    }
+};
+marked.use({ extensions: [spoilerExtension] });
 
-    // コードブロック
-    viewRenderer.code = function(code, infostring, escaped) {
-        const lang = (infostring || '').match(/\S*/)[0];
-        if (lang === 'ansi') {
-            const converter = new AnsiToHtml();
-            const html = converter.toHtml(code);
-            return `<pre class="code-block"><code class="hljs language-ansi">${html}</code><button class="copy-btn">コピー</button></pre>`;
+// ==ハイライト== 拡張
+const highlightExtension = {
+    name: 'highlight',
+    level: 'inline',
+    start(src) { return src.indexOf('=='); },
+    tokenizer(src) {
+        const match = src.match(/^==([^=\n][\s\S]*?[^=\n])==/);
+        if (match) {
+            return {
+                type: 'highlight',
+                raw: match[0],
+                text: match[1],
+                tokens: this.lexer.inlineTokens(match[1])
+            };
         }
-        const shouldRenderHtml = lang && lang.endsWith('!');
-        const actualLang = lang ? lang.replace(/!$/, '') : '';
-        if (shouldRenderHtml && actualLang === 'html') {
-            const sanitizedHtml = DOMPurify.sanitize(code, { USE_PROFILES: { html: true } });
-            return `<div class="rendered-html-block">${sanitizedHtml}</div>`;
-        }
-        let highlightedCode;
-        if (hljs.getLanguage(actualLang)) {
-            highlightedCode = hljs.highlight(code, { language: actualLang }).value;
-        } else {
-            highlightedCode = hljs.highlightAuto(code).value;
-        }
-        return `<pre class="code-block"><code class="hljs language-${actualLang}">${highlightedCode}</code><button class="copy-btn">コピー</button></pre>`;
-    };
+    },
+    renderer(token) {
+        return `<mark class=\"custom-highlight\">${this.parser.parseInline(token.tokens)}</mark>`;
+    }
+};
+marked.use({ extensions: [highlightExtension] });
 
-    marked.setOptions({
-        renderer: viewRenderer,
-        gfm: true,
-        breaks: true,
-        pedantic: false,
-        smartLists: true,
-        smartypants: false,
-    });
-
-    // スポイラー拡張
-    const spoilerExtension = {
-        name: 'spoiler',
-        level: 'inline',
-        start(src) { return src.match(/\|\|/)?.index; },
-        tokenizer(src, tokens) {
-            const rule = /^\|\|(\[([^\]]+)\])?([\s\S]+?)\|\|/;
-            const match = rule.exec(src);
-            if (match) {
-                const title = match[2] || '';
-                const textTokens = this.lexer.inlineTokens(match[3].trim());
-                return { type: 'spoiler', raw: match[0], title, tokens: textTokens };
+// --- 追加: -# 行・:--～--:範囲・🦋拡張 ---
+const smallLineExtension = {
+    name: 'smallLine',
+    level: 'block',
+    start(src) { return src.match(/(^|\n)(-# )|:--/)?.index; },
+    tokenizer(src) {
+        // :-- ～ --: の範囲
+        if (src.startsWith(':--')) {
+            const end = src.indexOf('--:');
+            if (end !== -1) {
+                const content = src.slice(3, end).replace(/^\n+|\n+$/g, '');
+                return {
+                    type: 'smallBlock',
+                    raw: src.slice(0, end + 3),
+                    text: content
+                };
             }
-        },
-        renderer(token) {
-            // AI・支援技術向けにスポイラー範囲を明示
-            const titleAttr = token.title ? ` data-title="${token.title}"` : '';
-            const isLargeTitle = token.raw.startsWith('||') && token.raw.endsWith(`[${token.title}]||`);
-            const sizeClass = isLargeTitle ? 'large-title' : 'small-title';
-            return `<span class="spoiler ${sizeClass}"${titleAttr}><span class="spoiler-marker" aria-hidden="true">[SPOILER-START]</span>${this.parser.parseInline(token.tokens)}<span class="spoiler-marker" aria-hidden="true">[SPOILER-END]</span></span>`;
         }
-    };
-    marked.use({ extensions: [spoilerExtension] });
+        // -# 行
+        const m = src.match(/^(?:-# )(.*)(?:\n|$)/);
+        if (m) {
+            return {
+                type: 'smallLine',
+                raw: m[0],
+                text: m[1]
+            };
+        }
+    },
+    renderer(token) {
+        if (token.type === 'smallBlock') {
+            return `<div class="small-muted">${marked.parse(token.text)}</div>`;
+        }
+        if (token.type === 'smallLine') {
+            return `<div class="small-muted">${marked.parseInline(token.text)}</div>`;
+        }
+    }
+};
+// 🦋拡張: inlineで🦋をspan化
+const butterflyExtension = {
+    name: 'butterfly',
+    level: 'inline',
+    start(src) { return src.indexOf('🦋'); },
+    tokenizer(src) {
+        if (src.startsWith('🦋')) {
+            return {
+                type: 'butterfly',
+                raw: '🦋',
+            };
+        }
+    },
+    renderer() {
+        return '<span class="interactive-butterfly" tabindex="0" role="button">🦋</span>';
+    }
+};
+// ::小さい文字:: インライン小文字拡張
+const smallInlineExtension = {
+    name: 'smallInline',
+    level: 'inline',
+    start(src) { return src.indexOf('::'); },
+    tokenizer(src) {
+        const match = /^::([^\n:][\s\S]*?[^\n:])::/.exec(src);
+        if (match) {
+            return {
+                type: 'smallInline',
+                raw: match[0],
+                text: match[1],
+                tokens: this.lexer.inlineTokens(match[1])
+            };
+        }
+    },
+    renderer(token) {
+        return `<span class="small-muted">${this.parser.parseInline(token.tokens)}</span>`;
+    }
+};
+marked.use({ extensions: [smallLineExtension, butterflyExtension, smallInlineExtension] });
 
-    // --- 追加: -# 行・:--～--:範囲・🦋拡張 ---
-    const smallLineExtension = {
-        name: 'smallLine',
-        level: 'block',
-        start(src) { return src.match(/(^|\n)(-# )|:--/)?.index; },
-        tokenizer(src) {
-            // :-- ～ --: の範囲
-            if (src.startsWith(':--')) {
-                const end = src.indexOf('--:');
-                if (end !== -1) {
-                    const content = src.slice(3, end).replace(/^\n+|\n+$/g, '');
-                    return {
-                        type: 'smallBlock',
-                        raw: src.slice(0, end + 3),
-                        text: content
-                    };
+// --- ビュー専用: 入力UI一切なし ---
+
+// --- ページロード時の自動リンク解釈 ---
+    // 拡張子判定用: パス部分のみで判定
+    function isDownloadLinkByExt(url, ext) {
+        try {
+            const u = new URL(url);
+            return u.pathname.toLowerCase().endsWith(ext);
+        } catch {
+            return false;
+        }
+    }
+
+    async function autoDetectAndDisplay() {
+        // location.hash優先
+        if (window.location.hash && window.location.hash.length > 1) {
+            await init(window.location.hash);
+            return;
+        }
+        // hashがなければ、本文内のaタグを検出
+        const contentElement = document.getElementById('content');
+        // 一時的にbodyのinnerHTMLからaタグを抽出
+        const links = Array.from(document.querySelectorAll('a'));
+        for (const a of links) {
+            const href = a.href;
+            if (isDownloadLinkByExt(href, '.txt')) {
+                contentElement.textContent = 'テキストリンクを解析中...';
+                try {
+                    const resp = await fetch(href);
+                    if (!resp.ok) throw new Error('ダウンロード失敗');
+                    const txt = await resp.text();
+                    const shareUrl = processor.extractShareableUrlFromText(txt);
+                    if (!shareUrl) throw new Error('共有URLが見つかりません');
+                    window.location.hash = shareUrl.split('#')[1] ? ('#'+shareUrl.split('#')[1]) : shareUrl;
+                    return;
+                } catch (err) {
+                    contentElement.innerHTML = '<div class="error">CORS制限のため.txtファイルを取得できません。ファイルを一度ダウンロードし、内容を確認してください。</div>';
+                    return;
+                }
+            } else if (isDownloadLinkByExt(href, '.png')) {
+                contentElement.textContent = '画像リンクを解析中...';
+                try {
+                    const resp = await fetch(href);
+                    if (!resp.ok) throw new Error('ダウンロード失敗');
+                    const arrayBuffer = await resp.arrayBuffer();
+                    const text = extractTextFromPng(new Uint8Array(arrayBuffer));
+                    if (!text) throw new Error('画像にテキストが埋め込まれていません');
+                    // テキストが共有URLならinit、そうでなければマークダウンとして表示
+                    const shareUrl = processor.extractShareableUrlFromText(text);
+                    if (shareUrl) {
+                        window.location.hash = shareUrl.split('#')[1] ? ('#'+shareUrl.split('#')[1]) : shareUrl;
+                    } else {
+                        await showExtractedText(text);
+                    }
+                    return;
+                } catch (err) {
+                    contentElement.innerHTML = `<img src="${href}" style="max-width:220px;display:block;margin:10px 0;">` +
+                      '<div class="error">CORS制限のため画像からテキスト抽出はできません。画像を一度ダウンロードし、アップロード等で内容を確認してください。</div>';
+                    return;
                 }
             }
-            // -# 行
-            const m = src.match(/^(?:-# )(.*)(?:\n|$)/);
-            if (m) {
-                return {
-                    type: 'smallLine',
-                    raw: m[0],
-                    text: m[1]
-                };
-            }
-        },
-        renderer(token) {
-            if (token.type === 'smallBlock') {
-                return `<div class="small-muted">${marked.parse(token.text)}</div>`;
-            }
-            if (token.type === 'smallLine') {
-                return `<div class="small-muted">${marked.parseInline(token.text)}</div>`;
-            }
         }
-    };
-    // 🦋拡張: inlineで🦋をspan化
-    const butterflyExtension = {
-        name: 'butterfly',
-        level: 'inline',
-        start(src) { return src.indexOf('🦋'); },
-        tokenizer(src) {
-            if (src.startsWith('🦋')) {
-                return {
-                    type: 'butterfly',
-                    raw: '🦋',
-                };
-            }
-        },
-        renderer() {
-            return '<span class="interactive-butterfly" tabindex="0" role="button">🦋</span>';
-        }
-    };
-    // ::小さい文字:: インライン小文字拡張
-    const smallInlineExtension = {
-        name: 'smallInline',
-        level: 'inline',
-        start(src) { return src.indexOf('::'); },
-        tokenizer(src) {
-            const match = /^::([^\n:][\s\S]*?[^\n:])::/.exec(src);
-            if (match) {
-                return {
-                    type: 'smallInline',
-                    raw: match[0],
-                    text: match[1],
-                    tokens: this.lexer.inlineTokens(match[1])
-                };
-            }
-        },
-        renderer(token) {
-            return `<span class="small-muted">${this.parser.parseInline(token.tokens)}</span>`;
-        }
-    };
-    marked.use({ extensions: [smallLineExtension, butterflyExtension, smallInlineExtension] });
-
-    // --- 履歴管理と確認設定 ---
-    let hashHistory = []; // ハッシュ履歴
-    let historyIndex = -1; // 現在の履歴位置
-    let showConfirm = false; // 確認ダイアログを表示するかどうか
-
-    // 確認ダイアログの設定を簡単に切り替え
-    function toggleConfirmDialog(enable) {
-        showConfirm = enable;
-        console.log(`確認ダイアログ: ${showConfirm ? '有効' : '無効'}`);
+        // どのリンクもなければエラー
+        contentElement.textContent = '表示するデータが見つかりません。URLまたはリンクを確認してください。';
     }
 
-    // --- 初期化処理 ---
-    async function init(hash = window.location.hash) {
-        const contentElement = document.getElementById('content');
-        const footerElement = document.getElementById('footer');
-        const titleElement = document.getElementById('title');
-
-        try {
-            await processor.loadExpressions();
-            if (!hash || hash.length < 2) {
-                showError('表示するデータが見つかりません。URLを確認してください。');
-                return;
+    // --- PNGからtEXtチャンク抽出 ---
+    function extractTextFromPng(uint8arr) {
+        if (!(uint8arr[0]===0x89 && uint8arr[1]===0x50 && uint8arr[2]===0x4E && uint8arr[3]===0x47)) return null;
+        let i = 8;
+        while (i < uint8arr.length) {
+            const len = (uint8arr[i]<<24)|(uint8arr[i+1]<<16)|(uint8arr[i+2]<<8)|uint8arr[i+3];
+            const type = String.fromCharCode(...uint8arr.slice(i+4,i+8));
+            if (type === 'tEXt') {
+                const data = uint8arr.slice(i+8,i+8+len);
+                const nul = data.indexOf(0);
+                if (nul>=0) {
+                    const text = new TextDecoder('utf-8').decode(data.slice(nul+1));
+                    return text;
+                }
             }
-            const data = processor.parseShareableURL(hash);
-            if (!data) {
-                showError('URLの形式が無効か、データのデコードに失敗しました。');
-                return;
-            }
-
-            // タイトル表示
-            if (data.title && data.title.trim()) {
-                const titleHtml = DOMPurify.sanitize(marked.parseInline(data.title.trim()));
-                titleElement.innerHTML = titleHtml;
-                titleElement.style.display = 'block';
-            } else {
-                titleElement.style.display = 'none';
-            }
-
-            // メインコンテンツの処理
-            let rawHtml = marked.parse(data.text || '');
-            let sanitizedHtml = DOMPurify.sanitize(rawHtml);
-            contentElement.innerHTML = sanitizedHtml;
-
-            // 🦋インタラクション付与
-            setupButterflyInteractions(contentElement);
-
-            // スポイラー処理
-            processSpoilers(contentElement);
-
-            // コードブロックのハイライト
-            contentElement.querySelectorAll('pre code').forEach(block => {
-                hljs.highlightElement(block);
-            });
-
-            // スポイラークリック処理
-            setupSpoilerClickHandlers(contentElement);
-
-            // フッター表示
-            const footerText = `${data.metadata.user || ''}${data.metadata.feel || ''}${data.metadata.action || ''}${data.metadata.ending || ''}`;
-            footerElement.textContent = footerText.trim() ? `と、${footerText}` : '';
-
-        } catch (error) {
-            console.error('表示処理中にエラー:', error);
-            showError(`エラーが発生しました: ${error.message}`);
+            i += 8 + len + 4;
         }
+        return null;
     }
 
-    // --- スポイラー処理関数 ---
-    function processSpoilers(parentElement) {
-        parentElement.querySelectorAll('.spoiler').forEach(spoiler => {
-            const images = spoiler.querySelectorAll('img');
-            const iframes = spoiler.querySelectorAll('iframe');
-            images.forEach(img => {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'media-spoiler';
-                wrapper.innerHTML = `${img.outerHTML}<div class="spoiler-button">${spoiler.dataset.title || 'スポイラー'}<br>(-解除-)</div>`;
-                img.replaceWith(wrapper);
-            });
-            iframes.forEach(iframe => {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'media-spoiler';
-                wrapper.innerHTML = `${iframe.outerHTML}<div class="spoiler-button">${spoiler.dataset.title || 'スポイラー'}<br>(-解除-)</div>`;
-                iframe.replaceWith(wrapper);
-            });
-        });
-    }
-
-    // --- スポイラークリック処理関数 ---
-    function setupSpoilerClickHandlers(parentElement) {
-        parentElement.addEventListener('click', function(e) {
-            const spoilerElement = e.target.closest('.spoiler, .media-spoiler');
-            if (spoilerElement) {
-                spoilerElement.classList.toggle('revealed');
-            }
-        });
-    }
-
-    // --- エラー表示関数 ---
-    function showError(message) {
+    // --- 抽出テキストをMarkdownプレビューとして表示 ---
+    async function showExtractedText(text) {
+        await processor.loadExpressions();
         const contentElement = document.getElementById('content');
         const titleElement = document.getElementById('title');
         const footerElement = document.getElementById('footer');
         titleElement.style.display = 'none';
         footerElement.style.display = 'none';
-        contentElement.innerHTML = `<div class="error">${message}</div>`;
+        let rawHtml = marked.parse(text||'');
+        let sanitizedHtml = DOMPurify.sanitize(rawHtml);
+        contentElement.innerHTML = sanitizedHtml;
+        setupButterflyInteractions(contentElement);
+        processSpoilers(contentElement);
+        contentElement.querySelectorAll('pre code').forEach(block => { hljs.highlightElement(block); });
+        setupSpoilerClickHandlers(contentElement);
     }
 
-    // --- コードコピー機能 ---
-    document.addEventListener('click', function(e) {
-        if (e.target.classList.contains('copy-btn')) {
-            const codeElement = e.target.previousElementSibling;
-            const codeText = codeElement.textContent;
-            navigator.clipboard.writeText(codeText).then(() => {
-                alert('コードをクリップボードにコピーしました！');
-            }).catch(err => {
-                console.error('コピーに失敗しました:', err);
-            });
-        }
-    });
+    // --- 通常のinit(hash)もそのまま ---
+        // --- 初期化処理 ---
+        async function init(hash = window.location.hash) {
+            const contentElement = document.getElementById('content');
+            const footerElement = document.getElementById('footer');
+            const titleElement = document.getElementById('title');
 
-    // --- ハッシュ変更の監視と確認 ---
-    window.addEventListener('hashchange', function(e) {
-        const newHash = window.location.hash;
-        const oldHash = e.oldURL ? e.oldURL.split('#')[1] || '' : hashHistory[historyIndex] || '';
+            try {
+                await processor.loadExpressions();
+                if (!hash || hash.length < 2) {
+                    showError('表示するデータが見つかりません。URLを確認してください。');
+                    return;
+                }
+                const data = processor.parseShareableURL(hash);
+                if (!data) {
+                    showError('URLの形式が無効か、データのデコードに失敗しました。');
+                    return;
+                }
 
-        if (newHash === oldHash) return; // 同じ場合は何もしない
+                // タイトル表示
+                if (data.title && data.title.trim()) {
+                    const titleHtml = DOMPurify.sanitize(marked.parseInline(data.title.trim()));
+                    titleElement.innerHTML = titleHtml;
+                    titleElement.style.display = 'block';
+                } else {
+                    titleElement.style.display = 'none';
+                }
 
-        if (showConfirm) {
-            const confirmed = confirm('移動しますか？');
-            if (!confirmed) {
-                // キャンセルされた場合、元のハッシュに戻す
-                window.location.hash = oldHash;
-                return;
+                // メインコンテンツの処理
+                let rawHtml = marked.parse(data.text || '');
+                let sanitizedHtml = DOMPurify.sanitize(rawHtml);
+                contentElement.innerHTML = sanitizedHtml;
+
+                // 🦋インタラクション付与
+                setupButterflyInteractions(contentElement);
+
+                // スポイラー処理
+                processSpoilers(contentElement);
+
+                // コードブロックのハイライト
+                contentElement.querySelectorAll('pre code').forEach(block => {
+                    hljs.highlightElement(block);
+                });
+
+                // スポイラークリック処理
+                setupSpoilerClickHandlers(contentElement);
+
+                // フッター表示
+                const footerText = `${data.metadata.user || ''}${data.metadata.feel || ''}${data.metadata.action || ''}${data.metadata.ending || ''}`;
+                footerElement.textContent = footerText.trim() ? `と、${footerText}` : '';
+
+            } catch (error) {
+                console.error('表示処理中にエラー:', error);
+                showError(`エラーが発生しました: ${error.message}`);
             }
         }
 
-        // 履歴に追加
-        if (historyIndex < hashHistory.length - 1) {
-            hashHistory = hashHistory.slice(0, historyIndex + 1); // 未来の履歴を削除
-        }
-        hashHistory.push(newHash);
-        historyIndex++;
-
-        console.log('ハッシュが変更されました:', newHash);
-        init(newHash); // 新しいハッシュで更新
-    });
-
-    // --- 履歴操作（Ctrl+Z と Ctrl+Y） ---
-    document.addEventListener('keydown', function(e) {
-        if (e.ctrlKey && e.key === 'z' && historyIndex > 0) {
-            e.preventDefault();
-            historyIndex--;
-            window.location.hash = hashHistory[historyIndex];
-            init(hashHistory[historyIndex]);
-            console.log('戻る:', hashHistory[historyIndex]);
-        } else if (e.ctrlKey && e.key === 'y' && historyIndex < hashHistory.length - 1) {
-            e.preventDefault();
-            historyIndex++;
-            window.location.hash = hashHistory[historyIndex];
-            init(hashHistory[historyIndex]);
-            console.log('進む:', hashHistory[historyIndex]);
-        }
-    });
-
-    // --- 初期化実行 ---
-    (function() {
-        const initialHash = window.location.hash || '#u=初期テキスト'; // デフォルトハッシュ
-        hashHistory.push(initialHash);
-        historyIndex = 0;
-        init(initialHash);
-    })();
-
-    // 確認ダイアログの切り替え例（コンソールで実行可能）
-    // toggleConfirmDialog(false); // 確認なしに切り替え
-    // toggleConfirmDialog(true);  // 確認ありに戻す
-
-    // --- 🦋バタフライインタラクション ---
-    function setupButterflyInteractions(parentElement) {
-        if (!parentElement) return;
-        // 既存のバタフライspanにイベント付与
-        parentElement.querySelectorAll('.interactive-butterfly').forEach(span => {
-            span.addEventListener('mouseover', e => span.classList.add('butterfly-hover'));
-            span.addEventListener('mouseout', e => span.classList.remove('butterfly-hover'));
-            span.addEventListener('click', e => flyButterfly(span));
-            span.addEventListener('keydown', e => {
-                if (e.key === 'Enter' || e.key === ' ') flyButterfly(span);
+        // --- スポイラー処理関数 ---
+        function processSpoilers(parentElement) {
+            parentElement.querySelectorAll('.spoiler').forEach(spoiler => {
+                const images = spoiler.querySelectorAll('img');
+                const iframes = spoiler.querySelectorAll('iframe');
+                images.forEach(img => {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'media-spoiler';
+                    wrapper.innerHTML = `${img.outerHTML}<div class="spoiler-button">${spoiler.dataset.title || 'スポイラー'}<br>(-解除-)</div>`;
+                    img.replaceWith(wrapper);
+                });
+                iframes.forEach(iframe => {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'media-spoiler';
+                    wrapper.innerHTML = `${iframe.outerHTML}<div class="spoiler-button">${spoiler.dataset.title || 'スポイラー'}<br>(-解除-)</div>`;
+                    iframe.replaceWith(wrapper);
+                });
             });
+        }
+
+        // --- スポイラークリック処理関数 ---
+        function setupSpoilerClickHandlers(parentElement) {
+            parentElement.addEventListener('click', function(e) {
+                const spoilerElement = e.target.closest('.spoiler, .media-spoiler');
+                if (spoilerElement) {
+                    spoilerElement.classList.toggle('revealed');
+                }
+            });
+        }
+
+        // --- エラー表示関数 ---
+        function showError(message) {
+            const contentElement = document.getElementById('content');
+            const titleElement = document.getElementById('title');
+            const footerElement = document.getElementById('footer');
+            titleElement.style.display = 'none';
+            footerElement.style.display = 'none';
+            contentElement.innerHTML = `<div class="error">${message}</div>`;
+        }
+
+        // --- コードコピー機能 ---
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('copy-btn')) {
+                const codeElement = e.target.previousElementSibling;
+                const codeText = codeElement.textContent;
+                navigator.clipboard.writeText(codeText).then(() => {
+                    alert('コードをクリップボードにコピーしました！');
+                }).catch(err => {
+                    console.error('コピーに失敗しました:', err);
+                });
+            }
         });
-    }
-    function flyButterfly(span) {
-        if (span.dataset.isFlying === 'true') return;
-        span.dataset.isFlying = 'true';
-        const rect = span.getBoundingClientRect();
-        const flying = document.createElement('span');
-        flying.textContent = '🦋';
-        flying.className = 'flying-butterfly';
-        flying.style.left = `${rect.left + window.scrollX}px`;
-        flying.style.top = `${rect.top + window.scrollY}px`;
-        document.body.appendChild(flying);
-        // パーティクル
-        const particlesContainer = document.createElement('div');
-        particlesContainer.className = 'butterfly-particle-container';
-        document.body.appendChild(particlesContainer);
-        // アニメーション
-        const duration = 2200 + Math.random()*1200;
-        const startX = rect.left + window.scrollX;
-        const startY = rect.top + window.scrollY;
-        const endX = startX + (Math.random()-0.5)*window.innerWidth*0.8;
-        const endY = startY - (Math.random()*window.innerHeight*0.5 + window.innerHeight*0.3);
-        const ctrlX1 = startX + (Math.random()-0.5)*300;
-        const ctrlY1 = startY - Math.random()*120 - 40;
-        const ctrlX2 = endX + (Math.random()-0.5)*200;
-        const ctrlY2 = endY + Math.random()*80 + 30;
-        let lastParticle = 0;
-        let t = 0;
-        function animate(ts) {
-            t = t || ts;
-            const progress = Math.min((ts-t)/duration, 1);
-            // ベジェ曲線
-            const u = 1-progress;
-            const x = u*u*u*startX + 3*u*u*progress*ctrlX1 + 3*u*progress*progress*ctrlX2 + progress*progress*progress*endX;
-            const y = u*u*u*startY + 3*u*u*progress*ctrlY1 + 3*u*progress*progress*ctrlY2 + progress*progress*progress*endY;
-            flying.style.left = `${x}px`;
-            flying.style.top = `${y}px`;
-            flying.style.transform = `rotate(${Math.sin(progress*Math.PI*6)*18}deg) scale(${1+Math.sin(progress*Math.PI*3)*0.13})`;
-            if (progress > 0.6) flying.style.opacity = String(1-(progress-0.6)/0.4);
-            // パーティクル
-            if (ts-lastParticle > 40 && progress < 0.85) {
-                createButterflyParticle(x, y, particlesContainer);
-                lastParticle = ts;
+
+        // --- ハッシュ変更の監視と確認 ---
+        window.addEventListener('hashchange', function(e) {
+            const newHash = window.location.hash;
+            const oldHash = e.oldURL ? e.oldURL.split('#')[1] || '' : hashHistory[historyIndex] || '';
+
+            if (newHash === oldHash) return; // 同じ場合は何もしない
+
+            if (showConfirm) {
+                const confirmed = confirm('移動しますか？');
+                if (!confirmed) {
+                    // キャンセルされた場合、元のハッシュに戻す
+                    window.location.hash = oldHash;
+                    return;
+                }
             }
-            if (progress < 1) {
-                requestAnimationFrame(animate);
+
+            // 履歴に追加
+            if (historyIndex < hashHistory.length - 1) {
+                hashHistory = hashHistory.slice(0, historyIndex + 1); // 未来の履歴を削除
+            }
+            hashHistory.push(newHash);
+            historyIndex++;
+
+            console.log('ハッシュが変更されました:', newHash);
+            init(newHash); // 新しいハッシュで更新
+        });
+
+        // --- 履歴操作（Ctrl+Z と Ctrl+Y） ---
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'z' && historyIndex > 0) {
+                e.preventDefault();
+                historyIndex--;
+                window.location.hash = hashHistory[historyIndex];
+                init(hashHistory[historyIndex]);
+                console.log('戻る:', hashHistory[historyIndex]);
+            } else if (e.ctrlKey && e.key === 'y' && historyIndex < hashHistory.length - 1) {
+                e.preventDefault();
+                historyIndex++;
+                window.location.hash = hashHistory[historyIndex];
+                init(hashHistory[historyIndex]);
+                console.log('進む:', hashHistory[historyIndex]);
+            }
+        });
+
+        // --- 初期化実行 ---
+        (async function() {
+            if (window.location.hash && window.location.hash.length > 1) {
+                await init(window.location.hash);
             } else {
-                flying.remove();
-                setTimeout(()=>particlesContainer.remove(), 900);
-                span.dataset.isFlying = '';
+                await autoDetectAndDisplay();
             }
+        })();
+
+        // 確認ダイアログの切り替え例（コンソールで実行可能）
+        // toggleConfirmDialog(false); // 確認なしに切り替え
+        // toggleConfirmDialog(true);  // 確認ありに戻す
+
+        // --- 🦋バタフライインタラクション ---
+        function setupButterflyInteractions(parentElement) {
+            if (!parentElement) return;
+            // 既存のバタフライspanにイベント付与
+            parentElement.querySelectorAll('.interactive-butterfly').forEach(span => {
+                span.addEventListener('mouseover', e => span.classList.add('butterfly-hover'));
+                span.addEventListener('mouseout', e => span.classList.remove('butterfly-hover'));
+                span.addEventListener('click', e => flyButterfly(span));
+                span.addEventListener('keydown', e => {
+                    if (e.key === 'Enter' || e.key === ' ') flyButterfly(span);
+                });
+            });
         }
-        requestAnimationFrame(animate);
-    }
-    function createButterflyParticle(x, y, container) {
-        const p = document.createElement('div');
-        p.className = 'butterfly-particle';
-        p.style.left = `${x+8-Math.random()*16}px`;
-        p.style.top = `${y+8-Math.random()*16}px`;
-        container.appendChild(p);
-        let life = 0, max = 18+Math.random()*10;
-        const dx = (Math.random()-0.5)*1.7, dy = (Math.random()-0.7)*1.2;
-        function anim() {
-            life++;
-            p.style.transform = `translate(${dx*life*1.2}px,${dy*life*1.2}px) scale(${1-life/max})`;
-            p.style.opacity = String(1-life/max);
-            if (life<max) requestAnimationFrame(anim); else p.remove();
+        function flyButterfly(span) {
+            if (span.dataset.isFlying === 'true') return;
+            span.dataset.isFlying = 'true';
+            const rect = span.getBoundingClientRect();
+            const flying = document.createElement('span');
+            flying.textContent = '🦋';
+            flying.className = 'flying-butterfly';
+            flying.style.left = `${rect.left + window.scrollX}px`;
+            flying.style.top = `${rect.top + window.scrollY}px`;
+            document.body.appendChild(flying);
+            // パーティクル
+            const particlesContainer = document.createElement('div');
+            particlesContainer.className = 'butterfly-particle-container';
+            document.body.appendChild(particlesContainer);
+            // アニメーション
+            const duration = 2200 + Math.random()*1200;
+            const startX = rect.left + window.scrollX;
+            const startY = rect.top + window.scrollY;
+            const endX = startX + (Math.random()-0.5)*window.innerWidth*0.8;
+            const endY = startY - (Math.random()*window.innerHeight*0.5 + window.innerHeight*0.3);
+            const ctrlX1 = startX + (Math.random()-0.5)*300;
+            const ctrlY1 = startY - Math.random()*120 - 40;
+            const ctrlX2 = endX + (Math.random()-0.5)*200;
+            const ctrlY2 = endY + Math.random()*80 + 30;
+            let lastParticle = 0;
+            let t = 0;
+            function animate(ts) {
+                t = t || ts;
+                const progress = Math.min((ts-t)/duration, 1);
+                // ベジェ曲線
+                const u = 1-progress;
+                const x = u*u*u*startX + 3*u*u*progress*ctrlX1 + 3*u*progress*progress*ctrlX2 + progress*progress*progress*endX;
+                const y = u*u*u*startY + 3*u*u*progress*ctrlY1 + 3*u*progress*progress*ctrlY2 + progress*progress*progress*endY;
+                flying.style.left = `${x}px`;
+                flying.style.top = `${y}px`;
+                flying.style.transform = `rotate(${Math.sin(progress*Math.PI*6)*18}deg) scale(${1+Math.sin(progress*Math.PI*3)*0.13})`;
+                if (progress > 0.6) flying.style.opacity = String(1-(progress-0.6)/0.4);
+                // パーティクル
+                if (ts-lastParticle > 40 && progress < 0.85) {
+                    createButterflyParticle(x, y, particlesContainer);
+                    lastParticle = ts;
+                }
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    flying.remove();
+                    setTimeout(()=>particlesContainer.remove(), 900);
+                    span.dataset.isFlying = '';
+                }
+            }
+            requestAnimationFrame(animate);
         }
-        requestAnimationFrame(anim);
-    }
-</script>
+        function createButterflyParticle(x, y, container) {
+            const p = document.createElement('div');
+            p.className = 'butterfly-particle';
+            p.style.left = `${x+8-Math.random()*16}px`;
+            p.style.top = `${y+8-Math.random()*16}px`;
+            container.appendChild(p);
+            let life = 0, max = 18+Math.random()*10;
+            const dx = (Math.random()-0.5)*1.7, dy = (Math.random()-0.7)*1.2;
+            function anim() {
+                life++;
+                p.style.transform = `translate(${dx*life*1.2}px,${dy*life*1.2}px) scale(${1-life/max})`;
+                p.style.opacity = String(1-life/max);
+                if (life<max) requestAnimationFrame(anim); else p.remove();
+            }
+            requestAnimationFrame(anim);
+        }
+    </script>
 </body>
 </html>
