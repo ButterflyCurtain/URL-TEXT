@@ -22,7 +22,7 @@
     <title>シンプルテキストツール</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.5/dist/purify.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/ansi-to-html@0.7.1/lib/ansi_to_html.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ansi-to-html@0.7.1/dist/ansi-to-html.min.js"></script>
 
     <style>
         /* === 基本スタイル === */
@@ -390,6 +390,320 @@
             line-height: 1.3;
             color: #dcddde;
         }
+
+        /* --- 追加: 小さく薄い文字 --- */
+        #preview .small-muted {
+            font-size: 0.85em;
+            color: #8e9297;
+            opacity: 0.7;
+        }
+        /* --- 蝶アニメーション --- */
+        #preview .interactive-butterfly {
+            cursor: pointer;
+            transition: filter 0.2s, transform 0.2s;
+            filter: drop-shadow(0 0 2px #fff3);
+            display: inline-block;
+        }
+        #preview .interactive-butterfly.butterfly-hover {
+            filter: drop-shadow(0 0 8px #aaf) brightness(1.2);
+            transform: scale(1.18) rotate(-10deg);
+        }
+        #preview .flying-butterfly {
+            position: fixed;
+            pointer-events: none;
+            font-size: 2em;
+            z-index: 10000;
+            will-change: transform, opacity, left, top;
+            transition: opacity 0.3s;
+        }
+        #preview .butterfly-particle-container {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+        }
+        #preview .butterfly-particle {
+            position: absolute;
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #aaf, #fff, #f8f);
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        /* === ここから追加 === */
+        /* スクロールバー */
+        ::-webkit-scrollbar {
+            width: 12px;
+            height: 12px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #72767d;
+            border-radius: 6px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background-color: #5865f2;
+        }
+        ::-webkit-scrollbar-track {
+            background-color: #40444b;
+            border-radius: 6px;
+        }
+
+        /* ボタンスタイル */
+        .button-primary {
+            background-color: #5865f2;
+            color: #ffffff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s ease;
+        }
+        .button-primary:hover {
+            background-color: #4752c4;
+        }
+        .button-secondary {
+            background-color: #40444b;
+            color: #dcddde;
+            border: 1px solid #72767d;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+        .button-secondary:hover {
+            background-color: #35393f;
+            border-color: #5865f2;
+        }
+
+        /* フォーム要素 */
+        input[type="text"], textarea {
+            background-color: #40444b;
+            color: #dcddde;
+            border: 1px solid #202225;
+            border-radius: 4px;
+            padding: 10px;
+            font-size: 16px;
+        }
+        input[type="text"]:focus, textarea:focus {
+            outline: none;
+            border-color: #5865f2;
+            box-shadow: 0 0 0 0.2em rgba(88, 101, 242, 0.5);
+        }
+
+        /* セレクトボックス */
+        select {
+            background-color: #40444b;
+            color: #dcddde;
+            border: 1px solid #202225;
+            border-radius: 4px;
+            padding: 10px;
+            font-size: 16px;
+        }
+        select:focus {
+            outline: none;
+            border-color: #5865f2;
+            box-shadow: 0 0 0 0.2em rgba(88, 101, 242, 0.5);
+        }
+
+        /* リストスタイル */
+        ul, ol {
+            margin: 0;
+            padding-left: 1.5em;
+        }
+        ul {
+            list-style-type: disc;
+        }
+        ol {
+            list-style-type: decimal;
+        }
+        li {
+            margin-bottom: 0.5em;
+        }
+
+        /* コードブロック */
+        pre {
+            background-color: #202225;
+            border: 1px solid #1a1c1f;
+            padding: 1em;
+            overflow: auto;
+            border-radius: 4px;
+            margin: 1em 0;
+            line-height: 1.45;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            margin: 0;
+            font-size: 0.85em;
+            border-radius: 0;
+            font-family: Consolas, 'Courier New', Courier, monospace;
+            color: #b9bbbe;
+            word-break: normal;
+            white-space: pre;
+            display: block;
+        }
+
+        /* インラインコード */
+        :not(pre) > code {
+            background-color: #202225;
+            border: 1px solid #1a1c1f;
+            padding: 0.2em 0.4em;
+            margin: 0 0.1em;
+            font-size: 0.85em;
+            border-radius: 3px;
+            font-family: Consolas, 'Courier New', Courier, monospace;
+            color: #b9bbbe;
+            white-space: nowrap;
+        }
+
+        /* テーブル */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1em 0;
+        }
+        th, td {
+            padding: 0.75em;
+            border: 1px solid #4f545c;
+            text-align: left;
+        }
+        th {
+            background-color: #2f3136;
+            color: #ffffff;
+        }
+        tr:nth-child(even) {
+            background-color: #2c2f33;
+        }
+
+        /* リンク */
+        a {
+            color: #00a8fc;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+
+        /* 画像 */
+        img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin: 0.5em 0;
+            background-color: #2f3136;
+            display: block;
+        }
+
+        /* 打ち消し線 */
+        del {
+            color: #8e9297;
+            text-decoration: line-through;
+        }
+
+        /* スポイラー */
+        span.spoiler {
+            background-color: #202225;
+            color: transparent;
+            padding: 0 4px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out;
+            display: inline-block;
+            position: relative;
+        }
+        span.spoiler::before {
+            content: attr(data-title);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #dcddde;
+            padding: 2px 6px;
+            background-color: rgba(32, 34, 37, 0.8);
+            border-radius: 3px;
+            opacity: 1;
+            transition: opacity 0.3s ease;
+        }
+        span.spoiler.small-title::before {
+            font-size: 12px;
+        }
+        span.spoiler.large-title::before {
+            font-size: 16px;
+        }
+        span.spoiler.revealed {
+            background-color: transparent;
+            color: inherit;
+        }
+        span.spoiler.revealed::before {
+            opacity: 0;
+        }
+        span.spoiler:not(.revealed):hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* タスクリスト */
+        .task-list-item {
+            list-style-type: none;
+            margin-left: -1.5em;
+            position: relative;
+            padding-left: 1.8em;
+            min-height: 1.5em;
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 0.5em;
+        }
+        .task-list-item input[type="checkbox"] {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            width: 1.2em;
+            height: 1.2em;
+            border: 2px solid #72767d;
+            border-radius: 4px;
+            background-color: #40444b;
+            cursor: default;
+            margin-top: 0.15em;
+            margin-right: 0.6em;
+            flex-shrink: 0;
+            position: relative;
+            vertical-align: top;
+            display: inline-block;
+        }
+        .task-list-item input[type="checkbox"]:checked {
+            background-color: #5865f2;
+            border-color: #5865f2;
+        }
+        .task-list-item input[type="checkbox"]:checked::before {
+            content: '';
+            display: block;
+            width: 0.3em;
+            height: 0.6em;
+            border: solid #dcddde;
+            border-width: 0 0.2em 0.2em 0;
+            transform: rotate(45deg) translate(-50%, -60%);
+            position: absolute;
+            left: 50%;
+            top: 50%;
+        }
+        .task-list-item input[type="checkbox"]:focus {
+            outline: none;
+            box-shadow: 0 0 0 0.2em rgba(88, 101, 242, 0.5);
+        }
+        .task-list-item input[type="checkbox"]:checked + span,
+        .task-list-item input[type="checkbox"]:checked + label {
+            color: #8e9297;
+            text-decoration: line-through;
+        }
+        .task-list-item > span,
+        .task-list-item > label {
+            margin-top: 0.05em;
+            line-height: 1.3;
+            color: #dcddde;
+        }
+
+        /* === ここまで追加 === */
     </style>
 </head>
 <body>
@@ -442,22 +756,22 @@
     <p><code># H1</code>, <code>## H2</code>, <code>### H3</code> など: 見出し</p>
     <p><code>- リスト</code>, <code>* リスト</code>, <code>+ リスト</code>: 箇条書きリスト (ネスト可)</p>
     <p><code>1. 番号付きリスト</code>: 番号付きリスト (ネスト可)</p>
-    <p><code>> 引用</code>: 引用</p>
-    <p><code>```言語名
-        コード
-        ```</code>: コードブロック (言語名は省略可)</p>
+    <p><code>&gt; 引用</code>: 引用</p>
+    <p><code>```言語名\nコード\n```</code>: コードブロック (言語名は省略可)</p>
     <p><code>`インラインコード`</code>: インラインコード</p>
     <p><code>**太字**</code> または <code>__太字__</code>: 太字</p>
     <p><code>*イタリック*</code> または <code>_イタリック_</code>: イタリック</p>
     <p><code>~~打ち消し線~~</code>: 打ち消し線</p>
     <p><code>[リンクテキスト](URL)</code>: リンク</p>
     <p><code>![代替テキスト](画像URL)</code>: 画像</p>
-    <p><code>| Th1 | Th2 |
-        |---|---|
-        | Td1 | Td2 |</code>: テーブル</p>
+    <p><code>| Th1 | Th2 |<br>|---|---|<br>| Td1 | Td2 |</code>: テーブル</p>
     <p><code>- [ ] 未完了タスク</code>, <code>- [x] 完了タスク</code>: タスクリスト</p>
     <p><code>---</code> または <code>***</code> または <code>___</code>: 水平線</p>
     <p><code>||スポイラーテキスト||</code>: スポイラー (独自拡張)</p>
+    <p><code>🦋</code>: 蝶の絵文字はホバー・クリックでアニメーション</p>
+    <p><code>-# この行</code>: 行頭に <code>-# </code> で小さく薄い文字</p>
+    <p><code>:--\n複数行\n--:</code>: 複数行を小さく薄い文字</p>
+    <p><code>::小さい文字::</code>: 行中の一部だけ小さく薄い文字</p>
     <p><em>(注意: 数式は現在サポートされていません)</em></p>
 </div>
 
@@ -513,6 +827,62 @@
         }
     };
     marked.use({ extensions: [spoilerExtension] });
+
+    // --- 追加: -# 行・:--～--:範囲・🦋拡張 ---
+    const smallLineExtension = {
+        name: 'smallLine',
+        level: 'block',
+        start(src) { return src.match(/(^|\n)(-# )|:--/)?.index; },
+        tokenizer(src) {
+            // :-- ～ --: の範囲
+            if (src.startsWith(':--')) {
+                const end = src.indexOf('--:');
+                if (end !== -1) {
+                    const content = src.slice(3, end).replace(/^\n+|\n+$/g, '');
+                    return {
+                        type: 'smallBlock',
+                        raw: src.slice(0, end + 3),
+                        text: content
+                    };
+                }
+            }
+            // -# 行
+            const m = src.match(/^(?:-# )(.*)(?:\n|$)/);
+            if (m) {
+                return {
+                    type: 'smallLine',
+                    raw: m[0],
+                    text: m[1]
+                };
+            }
+        },
+        renderer(token) {
+            if (token.type === 'smallBlock') {
+                return `<div class=\"small-muted\">${marked.parse(token.text)}</div>`;
+            }
+            if (token.type === 'smallLine') {
+                return `<div class=\"small-muted\">${marked.parseInline(token.text)}</div>`;
+            }
+        }
+    };
+    // 🦋拡張: inlineで🦋をspan化
+    const butterflyExtension = {
+        name: 'butterfly',
+        level: 'inline',
+        start(src) { return src.indexOf('🦋'); },
+        tokenizer(src) {
+            if (src.startsWith('🦋')) {
+                return {
+                    type: 'butterfly',
+                    raw: '🦋',
+                };
+            }
+        },
+        renderer() {
+            return '<span class=\"interactive-butterfly\" tabindex=\"0\" role=\"button\">🦋</span>';
+        }
+    };
+    marked.use({ extensions: [smallLineExtension, butterflyExtension] });
 
     // --- 初期化処理 ---
     async function init() {
@@ -570,7 +940,27 @@
 
         const updateAll = () => { updatePreview(); updateURLLengthComparison(); };
 
-        previewBtn.addEventListener('click', updatePreview);
+        previewBtn.addEventListener('click', function() {
+            // 現在の内容でview.htmlに遷移
+            const input = document.getElementById('input');
+            const titleValue = document.getElementById('title-field').value.trim();
+            const text = input.value;
+            const useBase64 = document.querySelector('input[name="encoding"]:checked').value === 'base64';
+            const metadata = processor.createMetadata(
+                document.getElementById('user-select').value,
+                document.getElementById('feel-select').value,
+                document.getElementById('action-select').value,
+                document.getElementById('ending-select').value
+            );
+            if (!text.trim() && !titleValue.trim()) {
+                alert('テキストまたはタイトルを入力してください。'); return;
+            }
+            processor.generateShareURL(text, metadata, useBase64, titleValue).then(({url}) => {
+                window.open('view.html' + url, '_blank');
+            }).catch(e => {
+                alert('プレビュー用URL生成に失敗しました: ' + e.message);
+            });
+        });
         shareBtn.addEventListener('click', generateShareURL);
         input.addEventListener('input', updateAll);
         titleField.addEventListener('input', updateAll);
@@ -617,6 +1007,9 @@
         } else {
             preview.innerHTML = htmlContent;
         }
+
+        // 🦋インタラクション付与
+        setupButterflyInteractions(preview);
     }
 
     // --- URL長さ比較更新 ---
@@ -679,6 +1072,87 @@
             console.error('共有URL生成エラー:', error);
             alert(`URLの生成またはコピーに失敗しました。\n${error.message}`);
         }
+    }
+
+    // --- 🦋バタフライインタラクション ---
+    function setupButterflyInteractions(parentElement) {
+        if (!parentElement) return;
+        parentElement.querySelectorAll('.interactive-butterfly').forEach(span => {
+            span.addEventListener('mouseover', e => span.classList.add('butterfly-hover'));
+            span.addEventListener('mouseout', e => span.classList.remove('butterfly-hover'));
+            span.addEventListener('click', e => flyButterfly(span));
+            span.addEventListener('keydown', e => {
+                if (e.key === 'Enter' || e.key === ' ') flyButterfly(span);
+            });
+        });
+    }
+    function flyButterfly(span) {
+        if (span.dataset.isFlying === 'true') return;
+        span.dataset.isFlying = 'true';
+        const rect = span.getBoundingClientRect();
+        const flying = document.createElement('span');
+        flying.textContent = '🦋';
+        flying.className = 'flying-butterfly';
+        flying.style.left = `${rect.left + window.scrollX}px`;
+        flying.style.top = `${rect.top + window.scrollY}px`;
+        document.body.appendChild(flying);
+        // パーティクル
+        const particlesContainer = document.createElement('div');
+        particlesContainer.className = 'butterfly-particle-container';
+        document.body.appendChild(particlesContainer);
+        // アニメーション
+        const duration = 2200 + Math.random()*1200;
+        const startX = rect.left + window.scrollX;
+        const startY = rect.top + window.scrollY;
+        const endX = startX + (Math.random()-0.5)*window.innerWidth*0.8;
+        const endY = startY - (Math.random()*window.innerHeight*0.5 + window.innerHeight*0.3);
+        const ctrlX1 = startX + (Math.random()-0.5)*300;
+        const ctrlY1 = startY - Math.random()*120 - 40;
+        const ctrlX2 = endX + (Math.random()-0.5)*200;
+        const ctrlY2 = endY + Math.random()*80 + 30;
+        let lastParticle = 0;
+        let t = 0;
+        function animate(ts) {
+            t = t || ts;
+            const progress = Math.min((ts-t)/duration, 1);
+            // ベジェ曲線
+            const u = 1-progress;
+            const x = u*u*u*startX + 3*u*u*progress*ctrlX1 + 3*u*progress*progress*ctrlX2 + progress*progress*progress*endX;
+            const y = u*u*u*startY + 3*u*u*progress*ctrlY1 + 3*u*progress*progress*ctrlY2 + progress*progress*progress*endY;
+            flying.style.left = `${x}px`;
+            flying.style.top = `${y}px`;
+            flying.style.transform = `rotate(${Math.sin(progress*Math.PI*6)*18}deg) scale(${1+Math.sin(progress*Math.PI*3)*0.13})`;
+            if (progress > 0.6) flying.style.opacity = String(1-(progress-0.6)/0.4);
+            // パーティクル
+            if (ts-lastParticle > 40 && progress < 0.85) {
+                createButterflyParticle(x, y, particlesContainer);
+                lastParticle = ts;
+            }
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            } else {
+                flying.remove();
+                setTimeout(()=>particlesContainer.remove(), 900);
+                span.dataset.isFlying = '';
+            }
+        }
+        requestAnimationFrame(animate);
+    }
+    function createButterflyParticle(x, y, container) {
+        const p = document.createElement('div');
+        p.className = 'butterfly-particle';
+        p.style.left = `${x+8-Math.random()*16}px`;
+        p.style.top = `${y+8-Math.random()*16}px`;
+        container.appendChild(p);
+        let life = 0, max = 18+Math.random()*10;
+        const dx = (Math.random()-0.5)*1.7, dy = (Math.random()-0.7)*1.2;
+        function anim() {
+            life++;
+            p.style.transform = `translate(${dx*life*1.2}px,${dy*life*1.2}px) scale(${1-life/max})`;
+            p.style.opacity = String(1-life/max);
+            if (life<max) requestAnimationFrame(anim); else p.remove();
+        }
+        requestAnimationFrame(anim);
     }
 
     // --- 初期化実行 ---
