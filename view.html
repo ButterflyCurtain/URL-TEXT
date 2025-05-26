@@ -28,7 +28,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.5/dist/purify.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/ansi-to-html@0.7.1/lib/ansi_to_html.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ansi-to-html@0.7.1/dist/ansi-to-html.min.js"></script>
 
     <style>
         /* === 基本スタイル === */
@@ -296,6 +296,60 @@
             line-height: 1.3;
             color: #dcddde;
         }
+
+        /* --- 追加: 小さく薄い文字 --- */
+        .small-muted {
+            font-size: 0.85em;
+            color: #8e9297;
+            opacity: 0.7;
+        }
+        /* --- 蝶アニメーション --- */
+        .interactive-butterfly {
+            cursor: pointer;
+            transition: filter 0.2s, transform 0.2s;
+            filter: drop-shadow(0 0 2px #fff3);
+            display: inline-block;
+        }
+        .interactive-butterfly.butterfly-hover {
+            filter: drop-shadow(0 0 8px #aaf) brightness(1.2);
+            transform: scale(1.18) rotate(-10deg);
+        }
+        .flying-butterfly {
+            position: fixed;
+            pointer-events: none;
+            font-size: 2em;
+            z-index: 10000;
+            will-change: transform, opacity, left, top;
+            transition: opacity 0.3s;
+        }
+        .butterfly-particle-container {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+        }
+        .butterfly-particle {
+            position: absolute;
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #aaf, #fff, #f8f);
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        /* スポイラー選択不可・AI向けマーカー */
+        .content span.spoiler, .content .media-spoiler {
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            position: relative;
+        }
+        .content span.spoiler * {
+            user-select: none !important;
+        }
+        .content .spoiler-marker {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -371,13 +425,90 @@
             }
         },
         renderer(token) {
+            // AI・支援技術向けにスポイラー範囲を明示
             const titleAttr = token.title ? ` data-title="${token.title}"` : '';
             const isLargeTitle = token.raw.startsWith('||') && token.raw.endsWith(`[${token.title}]||`);
             const sizeClass = isLargeTitle ? 'large-title' : 'small-title';
-            return `<span class="spoiler ${sizeClass}"${titleAttr}>${this.parser.parseInline(token.tokens)}</span>`;
+            return `<span class="spoiler ${sizeClass}"${titleAttr}><span class="spoiler-marker" aria-hidden="true">[SPOILER-START]</span>${this.parser.parseInline(token.tokens)}<span class="spoiler-marker" aria-hidden="true">[SPOILER-END]</span></span>`;
         }
     };
     marked.use({ extensions: [spoilerExtension] });
+
+    // --- 追加: -# 行・:--～--:範囲・🦋拡張 ---
+    const smallLineExtension = {
+        name: 'smallLine',
+        level: 'block',
+        start(src) { return src.match(/(^|\n)(-# )|:--/)?.index; },
+        tokenizer(src) {
+            // :-- ～ --: の範囲
+            if (src.startsWith(':--')) {
+                const end = src.indexOf('--:');
+                if (end !== -1) {
+                    const content = src.slice(3, end).replace(/^\n+|\n+$/g, '');
+                    return {
+                        type: 'smallBlock',
+                        raw: src.slice(0, end + 3),
+                        text: content
+                    };
+                }
+            }
+            // -# 行
+            const m = src.match(/^(?:-# )(.*)(?:\n|$)/);
+            if (m) {
+                return {
+                    type: 'smallLine',
+                    raw: m[0],
+                    text: m[1]
+                };
+            }
+        },
+        renderer(token) {
+            if (token.type === 'smallBlock') {
+                return `<div class="small-muted">${marked.parse(token.text)}</div>`;
+            }
+            if (token.type === 'smallLine') {
+                return `<div class="small-muted">${marked.parseInline(token.text)}</div>`;
+            }
+        }
+    };
+    // 🦋拡張: inlineで🦋をspan化
+    const butterflyExtension = {
+        name: 'butterfly',
+        level: 'inline',
+        start(src) { return src.indexOf('🦋'); },
+        tokenizer(src) {
+            if (src.startsWith('🦋')) {
+                return {
+                    type: 'butterfly',
+                    raw: '🦋',
+                };
+            }
+        },
+        renderer() {
+            return '<span class="interactive-butterfly" tabindex="0" role="button">🦋</span>';
+        }
+    };
+    // ::小さい文字:: インライン小文字拡張
+    const smallInlineExtension = {
+        name: 'smallInline',
+        level: 'inline',
+        start(src) { return src.indexOf('::'); },
+        tokenizer(src) {
+            const match = /^::([^\n:][\s\S]*?[^\n:])::/.exec(src);
+            if (match) {
+                return {
+                    type: 'smallInline',
+                    raw: match[0],
+                    text: match[1],
+                    tokens: this.lexer.inlineTokens(match[1])
+                };
+            }
+        },
+        renderer(token) {
+            return `<span class="small-muted">${this.parser.parseInline(token.tokens)}</span>`;
+        }
+    };
+    marked.use({ extensions: [smallLineExtension, butterflyExtension, smallInlineExtension] });
 
     // --- 履歴管理と確認設定 ---
     let hashHistory = []; // ハッシュ履歴
@@ -421,6 +552,9 @@
             let rawHtml = marked.parse(data.text || '');
             let sanitizedHtml = DOMPurify.sanitize(rawHtml);
             contentElement.innerHTML = sanitizedHtml;
+
+            // 🦋インタラクション付与
+            setupButterflyInteractions(contentElement);
 
             // スポイラー処理
             processSpoilers(contentElement);
@@ -551,6 +685,88 @@
     // 確認ダイアログの切り替え例（コンソールで実行可能）
     // toggleConfirmDialog(false); // 確認なしに切り替え
     // toggleConfirmDialog(true);  // 確認ありに戻す
+
+    // --- 🦋バタフライインタラクション ---
+    function setupButterflyInteractions(parentElement) {
+        if (!parentElement) return;
+        // 既存のバタフライspanにイベント付与
+        parentElement.querySelectorAll('.interactive-butterfly').forEach(span => {
+            span.addEventListener('mouseover', e => span.classList.add('butterfly-hover'));
+            span.addEventListener('mouseout', e => span.classList.remove('butterfly-hover'));
+            span.addEventListener('click', e => flyButterfly(span));
+            span.addEventListener('keydown', e => {
+                if (e.key === 'Enter' || e.key === ' ') flyButterfly(span);
+            });
+        });
+    }
+    function flyButterfly(span) {
+        if (span.dataset.isFlying === 'true') return;
+        span.dataset.isFlying = 'true';
+        const rect = span.getBoundingClientRect();
+        const flying = document.createElement('span');
+        flying.textContent = '🦋';
+        flying.className = 'flying-butterfly';
+        flying.style.left = `${rect.left + window.scrollX}px`;
+        flying.style.top = `${rect.top + window.scrollY}px`;
+        document.body.appendChild(flying);
+        // パーティクル
+        const particlesContainer = document.createElement('div');
+        particlesContainer.className = 'butterfly-particle-container';
+        document.body.appendChild(particlesContainer);
+        // アニメーション
+        const duration = 2200 + Math.random()*1200;
+        const startX = rect.left + window.scrollX;
+        const startY = rect.top + window.scrollY;
+        const endX = startX + (Math.random()-0.5)*window.innerWidth*0.8;
+        const endY = startY - (Math.random()*window.innerHeight*0.5 + window.innerHeight*0.3);
+        const ctrlX1 = startX + (Math.random()-0.5)*300;
+        const ctrlY1 = startY - Math.random()*120 - 40;
+        const ctrlX2 = endX + (Math.random()-0.5)*200;
+        const ctrlY2 = endY + Math.random()*80 + 30;
+        let lastParticle = 0;
+        let t = 0;
+        function animate(ts) {
+            t = t || ts;
+            const progress = Math.min((ts-t)/duration, 1);
+            // ベジェ曲線
+            const u = 1-progress;
+            const x = u*u*u*startX + 3*u*u*progress*ctrlX1 + 3*u*progress*progress*ctrlX2 + progress*progress*progress*endX;
+            const y = u*u*u*startY + 3*u*u*progress*ctrlY1 + 3*u*progress*progress*ctrlY2 + progress*progress*progress*endY;
+            flying.style.left = `${x}px`;
+            flying.style.top = `${y}px`;
+            flying.style.transform = `rotate(${Math.sin(progress*Math.PI*6)*18}deg) scale(${1+Math.sin(progress*Math.PI*3)*0.13})`;
+            if (progress > 0.6) flying.style.opacity = String(1-(progress-0.6)/0.4);
+            // パーティクル
+            if (ts-lastParticle > 40 && progress < 0.85) {
+                createButterflyParticle(x, y, particlesContainer);
+                lastParticle = ts;
+            }
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            } else {
+                flying.remove();
+                setTimeout(()=>particlesContainer.remove(), 900);
+                span.dataset.isFlying = '';
+            }
+        }
+        requestAnimationFrame(animate);
+    }
+    function createButterflyParticle(x, y, container) {
+        const p = document.createElement('div');
+        p.className = 'butterfly-particle';
+        p.style.left = `${x+8-Math.random()*16}px`;
+        p.style.top = `${y+8-Math.random()*16}px`;
+        container.appendChild(p);
+        let life = 0, max = 18+Math.random()*10;
+        const dx = (Math.random()-0.5)*1.7, dy = (Math.random()-0.7)*1.2;
+        function anim() {
+            life++;
+            p.style.transform = `translate(${dx*life*1.2}px,${dy*life*1.2}px) scale(${1-life/max})`;
+            p.style.opacity = String(1-life/max);
+            if (life<max) requestAnimationFrame(anim); else p.remove();
+        }
+        requestAnimationFrame(anim);
+    }
 </script>
 </body>
 </html>
