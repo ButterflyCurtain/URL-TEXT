@@ -32,13 +32,17 @@ class SimpleTextProcessor {
         };
     }
 
-    // URLセーフエンコーディング（日本語文字をそのまま保持）
+    // URLセーフエンコーディング（日本語文字をそのまま保持、スペースは%20に）
     encodeURLSafe(str) {
-        return str.split('').map(char => {
+        // encodeURIComponentはスペースを%20にする
+        return Array.from(str).map(char => {
+            // 日本語や記号はそのまま
             if (/[A-Za-z0-9\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(char)) {
                 return char;
             }
-            if (char === ' ') return '+';
+            // スペースは%20に
+            if (char === ' ') return '%20';
+            // 一部記号はそのまま
             if ([',', ':', ';', '.'].includes(char)) return char;
             try {
                 return encodeURIComponent(char);
@@ -49,10 +53,11 @@ class SimpleTextProcessor {
         }).join('');
     }
 
-    // URLセーフデコーディング（日本語文字対応）
+    // URLセーフデコーディング（日本語文字対応、%20→スペース）
     decodeURLSafe(str) {
         try {
-            return decodeURIComponent(str);
+            // まず%20をスペースに戻す
+            return decodeURIComponent(str.replace(/%20/g, ' '));
         } catch (e) {
             console.error('デコードエラー:', e);
             return str;
