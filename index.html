@@ -1,3 +1,4 @@
+
 <!--
   このHTMLは以下のサードパーティライブラリを使用しています:
 
@@ -708,7 +709,92 @@
             color: #dcddde;
         }
 
-        /* === ここまで追加 === */
+                /* === カスタムハイライト === */
+        #preview mark.custom-highlight, mark.custom-highlight {
+            background: rgba(255, 255, 80, 0.82);
+            color: #181818;
+            padding: 0.22em 0.45em;
+            border-radius: 4px;
+            font-weight: 600;
+            box-shadow: 0 1px 4px #e6e60033;
+            opacity: 0.99;
+            line-height: 1.9;
+            vertical-align: middle;
+            transition: background 0.2s, color 0.2s, opacity 0.2s;
+        }
+        #preview mark.custom-highlight:hover, mark.custom-highlight:hover {
+            background: rgba(255, 255, 160, 0.98);
+            color: #111;
+            opacity: 1;
+        }
+
+        /* === diff コードブロック用 === */
+        #preview pre code.language-diff .hljs-addition, pre code.language-diff .hljs-addition {
+            display: block;
+            background: linear-gradient(90deg, rgba(80, 220, 120, 0.32) 80%, rgba(80, 220, 120, 0.12) 100%);
+            color: #2ecc40;
+            font-weight: bold;
+            border-left: 4px solid #2ecc40;
+            padding-left: 0.5em;
+        }
+        #preview pre code.language-diff .hljs-deletion, pre code.language-diff .hljs-deletion {
+            display: block;
+            background: linear-gradient(90deg, rgba(255, 80, 80, 0.32) 80%, rgba(255, 80, 80, 0.12) 100%);
+            color: #ff5555;
+            font-weight: bold;
+            border-left: 4px solid #ff5555;
+            padding-left: 0.5em;
+        }
+    </style>
+</head>
+<body>
+<!-- ...省略... -->
+
+<script type="module">
+import SimpleTextProcessor from './simple-text-processor.js';
+// ...既存のコード...
+
+// --- diff コードブロックのシンタックスハイライト ---
+previewRenderer.code = function(code, infostring, escaped) {
+    const lang = (infostring || '').match(/\S*/)[0];
+    if (lang === 'ansi') {
+        const converter = new AnsiToHtml();
+        const html = converter.toHtml(code);
+        return `<pre class="code-block"><code class="hljs language-ansi">${html}</code></pre>`;
+    }
+    const shouldRenderHtml = lang && lang.endsWith('!');
+    const actualLang = lang ? lang.replace(/!$/, '') : '';
+    if (shouldRenderHtml && actualLang === 'html') {
+        const sanitizedHtml = DOMPurify.sanitize(code, { USE_PROFILES: { html: true } });
+        return `<div class="rendered-html-block">${sanitizedHtml}</div>`;
+    }
+    let highlightedCode;
+    if (actualLang === 'diff') {
+        highlightedCode = code.split('\n').map(line => {
+            if (/^\+/.test(line)) {
+                return `<span class=\"hljs-addition\">${escapeHtml(line)}</span>`;
+            } else if (/^-/.test(line)) {
+                return `<span class=\"hljs-deletion\">${escapeHtml(line)}</span>`;
+            } else {
+                return escapeHtml(line);
+            }
+        }).join('\n');
+    } else {
+        highlightedCode = code.replace(/[&<>"']/g, function(tag) {
+            const chars = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+            return chars[tag] || tag;
+        });
+    }
+    return `<pre class="code-block"><code class="hljs language-${actualLang}">${highlightedCode}</code></pre>`;
+};
+
+function escapeHtml(str) {
+    return str.replace(/[&<>"']/g, function(tag) {
+        const chars = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+        return chars[tag] || tag;
+    });
+}
+</script>
     </style>
 </head>
 <body>
