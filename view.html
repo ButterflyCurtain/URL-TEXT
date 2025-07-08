@@ -59,6 +59,7 @@
         .content {
             font-size: 16px;
             word-wrap: break-word;
+            white-space: pre-wrap;
         }
         .footer {
             margin-top: 25px;
@@ -730,8 +731,15 @@ marked.use({ extensions: [smallLineExtension, butterflyExtension, smallInlineExt
                     titleElement.style.display = 'none';
                 }
 
-                // メインコンテンツの処理
-                let rawHtml = marked.parse(data.text || '');
+                // --- ここから追加: スペース復元 ---
+                let text = data.text || '';
+                if (hash.includes('u=')) {
+                    // URLセーフ形式の場合はdecodeURLSafeでスペース復元
+                    text = processor.decodeURLSafe(text);
+                }
+                // --- ここまで追加 ---
+
+                let rawHtml = marked.parse(text);
                 let sanitizedHtml = DOMPurify.sanitize(rawHtml);
                 contentElement.innerHTML = sanitizedHtml;
 
