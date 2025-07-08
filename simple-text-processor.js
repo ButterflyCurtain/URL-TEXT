@@ -32,16 +32,18 @@ class SimpleTextProcessor {
         };
     }
 
-    // URLセーフエンコーディング（日本語文字をそのまま保持、スペースは%20に）
+    // URLセーフエンコーディング（日本語文字をそのまま保持、スペースは特殊記号に）
     encodeURLSafe(str) {
-        // encodeURIComponentはスペースを%20にする
-        return Array.from(str).map(char => {
+        // 半角スペース→⦀, 全角スペース→⦁
+        // まず全ての半角・全角スペースをユニコード記号に一括置換
+        let replaced = str.replace(/ /g, '\u2980').replace(/　/g, '\u2981');
+        // 1文字ずつ処理（既に置換済みの⦀・⦁はそのまま）
+        return replaced.split(/(\u2980|\u2981|.)/g).filter(Boolean).map(char => {
+            if (char === '\u2980' || char === '\u2981') return char;
             // 日本語や記号はそのまま
             if (/[A-Za-z0-9\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(char)) {
                 return char;
             }
-            // スペースは%20に
-            if (char === ' ') return '%20';
             // 一部記号はそのまま
             if ([',', ':', ';', '.'].includes(char)) return char;
             try {
@@ -53,11 +55,25 @@ class SimpleTextProcessor {
         }).join('');
     }
 
-    // URLセーフデコーディング（日本語文字対応、%20→スペース）
+    // URLセーフデコーディング（日本語文字対応、特殊記号→スペース）
     decodeURLSafe(str) {
         try {
-            // まず%20をスペースに戻す
-            return decodeURIComponent(str.replace(/%20/g, ' '));
+            // ⦀→半角スペース, ⦁→全角スペース
+            let replaced = str.replace(/\u2980/g, ' ').replace(/\u2981/g, '　');
+            // %エンコード部分だけでなく、全体をdecodeURIComponent（ただし例外処理）
+            try {
+                replaced = decodeURIComponent(replaced);
+            } catch (e) {
+                // 部分的に壊れている場合は、%XXだけ個別デコード
+                replaced = replaced.replace(/%[0-9A-Fa-f]{2}/g, m => {
+                    try {
+                        return decodeURIComponent(m);
+                    } catch {
+                        return m;
+                    }
+                });
+            }
+            return replaced;
         } catch (e) {
             console.error('デコードエラー:', e);
             return str;
