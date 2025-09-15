@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>テキストツール</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.5/dist/purify.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --surface-color: #242424;
+            --primary-text-color: #e6e6e6;
+            --secondary-text-color: #a0a0a0;
+            --border-color: #3a3a3a;
+            --accent-color: #007bff;
+            --accent-color-hover: #0056b3;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --font-family-mono: 'SF Mono', 'Consolas', 'Menlo', monospace;
+            --shadow: none;
+        }
+
+        body.light-theme {
+            --bg-color: #f5f5f5;
+            --surface-color: #ffffff;
+            --primary-text-color: #212121;
+            --secondary-text-color: #757575;
+            --border-color: #e0e0e0;
+            --shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--primary-text-color);
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5em;
+        }
+
+        h1 {
+            font-size: 2em;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .card {
+            background-color: var(--surface-color);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 2em;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .card-header {
+            padding: 1em 1.5em;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .card-header h2 { margin: 0; font-size: 1.2em; }
+        .card-body { padding: 1.5em; }
+
+        textarea, input[type="text"], select {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 10px;
+            margin-bottom: 1em;
+            background-color: var(--bg-color);
+            color: var(--primary-text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 1em;
+            font-family: var(--font-family);
+        }
+        textarea {
+            min-height: 250px;
+            resize: vertical;
+            font-family: var(--font-family-mono);
+        }
+        textarea:focus, input[type="text"]:focus, select:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 1em;
+            margin-bottom: 1.5em;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5em;
+            font-size: 0.95em;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: all 0.2s;
+            background-color: var(--surface-color);
+            color: var(--primary-text-color);
+        }
+        .button:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+        .button-primary {
+            background-color: var(--accent-color);
+            border-color: var(--accent-color);
+            color: #fff;
+        }
+        .button-primary:hover {
+            background-color: var(--accent-color-hover);
+            border-color: var(--accent-color-hover);
+            color: #fff;
+        }
+
+        #image-status-area {
+            margin-top: 1.5em;
+            padding: 1em;
+            background-color: var(--bg-color);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 1em;
+        }
+        #image-status-area p { margin: 0; }
+        #image-status-area img {
+            max-width: 100px;
+            max-height: 100px;
+            border-radius: 4px;
+        }
+
+        #preview {
+            padding: 1.5em;
+            border-top: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header class="header">
+        <h1>テキストツール</h1>
+        <button id="theme-toggle-btn" class="button">テーマ切替</button>
+    </header>
+
+    <div class="card">
+        <div class="card-header"><h2>エディタ</h2></div>
+        <div class="card-body">
+            <input type="text" id="title-field" placeholder="タイトル (省略可能)">
+            <textarea id="input" placeholder="ここにテキストを入力..."></textarea>
+            <div class="controls">
+                <select id="user-select"><option value="0">-- 発言者 --</option></select>
+                <select id="feel-select"><option value="0">-- 感情 --</option></select>
+                <select id="action-select"><option value="0">-- 動作 --</option></select>
+                <select id="ending-select"><option value="0">-- 末尾 --</option></select>
+            </div>
+            <button id="preview-btn" class="button">プレビュー更新</button>
+            <div class="button-group" style="margin-top: 1.5em; border-top: 1px solid var(--border-color); padding-top: 1.5em;">
+                <button id="share-btn" class="button button-primary">共有URL生成</button>
+                <div style="display:flex; flex-direction:column; gap: 5px;">
+                    <label style="display:flex; align-items:center; gap: 5px; font-size: 0.9em;"><input type="radio" name="encoding" value="utf8" checked> 日本語そのまま (短い)</label>
+                    <label style="display:flex; align-items:center; gap: 5px; font-size: 0.9em;"><input type="radio" name="encoding" value="base64"> Base64 (長いが確実)</label>
+                </div>
+            </div>
+        </div>
+        <div id="preview"></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2>画像化と共有</h2></div>
+        <div class="card-body">
+            <div class="generation-controls">
+                <p style="margin-top:0; color: var(--secondary-text-color);">データを埋め込むための背景画像を選択します。選択しない場合は、デフォルトのアイコンが使用されます。</p>
+                <label class="button">
+                    ベース画像を選択 (任意)
+                    <input type="file" id="base-image-upload" accept="image/jpeg,image/png" style="display:none;">
+                </label>
+                <div id="base-image-preview-area" style="margin-top: 1em;"></div>
+
+                <hr style="border:none; border-top: 1px solid var(--border-color); margin: 1.5em 0;">
+
+                <div style="display: flex; flex-wrap: wrap; gap: 1em; align-items: center;">
+                    <button id="generate-image-btn" class="button button-primary">埋め込み画像を生成</button>
+                    <label class="button">
+                        ファイルからデータを読込
+                        <input type="file" id="image-upload" accept="image/png" style="display:none;">
+                    </label>
+                </div>
+            </div>
+            <div id="image-status-area" style="display: none;">
+                <p id="image-status"></p>
+                <div id="image-preview"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2>旧URLからの復元</h2></div>
+        <div class="card-body">
+            <p style="margin-top:0; color: var(--secondary-text-color);">以前のバージョンで生成した共有URLをお持ちの場合は、ここに貼り付けて内容を復元できます。</p>
+            <div style="display: flex; gap: 1em;">
+                <input type="text" id="restore-url-input" placeholder="共有URLを貼り付け..." style="flex-grow:1; margin-bottom:0;">
+                <button id="restore-from-url-btn" class="button">復元</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import SimpleTextProcessor from './simple-text-processor.js';
+
+    // --- GLOBALS & HELPERS ---
+    const processor = new SimpleTextProcessor();
+    let expressionsData = null;
+    let userBaseImage = null;
+
+    const Steganographer = {
+        MAGIC_NUMBER: 'STPv1',
+        encode: async function(canvas, jsonData) {
+            const textEncoder = new TextEncoder();
+            const dataBytes = textEncoder.encode(jsonData);
+            const magicBytes = textEncoder.encode(this.MAGIC_NUMBER);
+            const dataLengthBytes = new Uint8Array(4);
+            new DataView(dataLengthBytes.buffer).setUint32(0, dataBytes.length, false);
+            const payload = new Uint8Array(magicBytes.length + dataLengthBytes.length + dataBytes.length);
+            payload.set(magicBytes, 0);
+            payload.set(dataLengthBytes, magicBytes.length);
+            payload.set(dataBytes, magicBytes.length + dataLengthBytes.length);
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const pixelData = imageData.data;
+            const maxCapacity = Math.floor((pixelData.length / 4) * 3);
+            if (payload.length * 8 > maxCapacity) {
+                throw new Error(`データが大きすぎます。最大${Math.floor(maxCapacity / 8)}バイトまでです。`);
+            }
+            let dataIndex = 0;
+            for (let i = 0; i < payload.length; i++) {
+                const byte = payload[i];
+                for (let j = 0; j < 8; j++) {
+                    const bit = (byte >> (7 - j)) & 1;
+                    while (dataIndex % 4 === 3) { dataIndex++; }
+                    pixelData[dataIndex] = (pixelData[dataIndex] & 0xFE) | bit;
+                    dataIndex++;
+                }
+            }
+            ctx.putImageData(imageData, 0, 0);
+            return canvas;
+        },
+        decode: async function(image) {
+            const canvas = document.createElement('canvas');
+            canvas.width = image.width;
+            canvas.height = image.height;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(image, 0, 0);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const pixelData = imageData.data;
+            let dataIndex = 0;
+            function readByte() {
+                let byte = 0;
+                for (let i = 0; i < 8; i++) {
+                    while (dataIndex % 4 === 3) { dataIndex++; }
+                    const bit = pixelData[dataIndex] & 1;
+                    byte = (byte << 1) | bit;
+                    dataIndex++;
+                }
+                return byte;
+            }
+            const textDecoder = new TextDecoder();
+            const magicBytes = new Uint8Array(this.MAGIC_NUMBER.length);
+            for(let i=0; i<this.MAGIC_NUMBER.length; i++) magicBytes[i] = readByte();
+            if (textDecoder.decode(magicBytes) !== this.MAGIC_NUMBER) return null;
+            const dataLengthBytes = new Uint8Array(4);
+            for(let i=0; i<4; i++) dataLengthBytes[i] = readByte();
+            const dataLength = new DataView(dataLengthBytes.buffer).getUint32(0, false);
+            const dataBytes = new Uint8Array(dataLength);
+            for(let i=0; i<dataLength; i++) dataBytes[i] = readByte();
+            return textDecoder.decode(dataBytes);
+        }
+    };
+
+    const PNGUtils = {
+        _crc32_table: null,
+        crc32: function(buf) {
+            if (!this._crc32_table) {
+                this._crc32_table = new Uint32Array(256);
+                for (let n = 0; n < 256; n++) {
+                    let c = n;
+                    for (let k = 0; k < 8; k++) c = ((c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1));
+                    this._crc32_table[n] = c;
+                }
+            }
+            let crc = -1;
+            for (let i = 0; i < buf.length; i++) crc = (crc >>> 8) ^ this._crc32_table[(crc ^ buf[i]) & 0xff];
+            return (crc ^ -1) >>> 0;
+        },
+        insertTextChunk: function(png, keyword, text) {
+            const textEncoder = new TextEncoder();
+            const textBytes = textEncoder.encode(text);
+            const keywordBytes = new Uint8Array(keyword.length);
+            for(let i=0; i<keyword.length; i++) keywordBytes[i] = keyword.charCodeAt(i);
+            const chunkData = new Uint8Array(keywordBytes.length + 1 + textBytes.length);
+            chunkData.set(keywordBytes, 0);
+            chunkData[keywordBytes.length] = 0;
+            chunkData.set(textBytes, keywordBytes.length + 1);
+            const chunkType = new Uint8Array([0x74, 0x45, 0x58, 0x74]);
+            const chunkDataAndType = new Uint8Array(chunkType.length + chunkData.length);
+            chunkDataAndType.set(chunkType, 0);
+            chunkDataAndType.set(chunkData, chunkType.length);
+            const crc = this.crc32(chunkDataAndType);
+            const chunk = new Uint8Array(12 + chunkData.length);
+            const view = new DataView(chunk.buffer);
+            view.setUint32(0, chunkData.length, false);
+            chunk.set(chunkDataAndType, 4);
+            view.setUint32(8 + chunkData.length, crc, false);
+            let pos = 8;
+            const ihdrLen = new DataView(png.buffer).getUint32(pos, false);
+            pos += 4 + 4 + ihdrLen + 4;
+            const newPng = new Uint8Array(png.length + chunk.length);
+            newPng.set(png.slice(0, pos), 0);
+            newPng.set(chunk, pos);
+            newPng.set(png.slice(pos), pos + chunk.length);
+            return newPng;
+        }
+    };
+
+    // --- UI & LOGIC FUNCTIONS ---
+
+    function updatePreview() {
+        const text = document.getElementById('input').value;
+        const title = document.getElementById('title-field').value;
+        let content = text;
+        if(title) content = `# ${title}\n\n${content}`;
+        const html = DOMPurify.sanitize(marked.parse(content));
+        document.getElementById('preview').innerHTML = html;
+    }
+
+    function populateSelects() {
+        if (!expressionsData) return;
+        const selects = {
+            'user-select': expressionsData.users, 'feel-select': expressionsData.feels,
+            'action-select': expressionsData.actions, 'ending-select': expressionsData.endings
+        };
+        Object.entries(selects).forEach(([id, options]) => {
+            const select = document.getElementById(id);
+            select.innerHTML = '';
+            const defaultOpt = id.replace('-select', '');
+            select.add(new Option(`-- ${defaultOpt} --`, '0'));
+            Object.entries(options).forEach(([value, text]) => {
+                if (text !== 'none-date') select.add(new Option(text, value));
+            });
+            select.value = '0';
+        });
+    }
+
+    function handleBaseImageUpload(event) {
+        const file = event.target.files[0];
+        const previewArea = document.getElementById('base-image-preview-area');
+        previewArea.innerHTML = '';
+        userBaseImage = null;
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            userBaseImage = new Image();
+            userBaseImage.onload = () => {
+                const previewImg = new Image();
+                previewImg.src = userBaseImage.src;
+                previewImg.style.maxWidth = '200px';
+                previewImg.style.borderRadius = '4px';
+                previewImg.style.marginTop = '0.5em';
+                previewArea.appendChild(previewImg);
+            };
+            userBaseImage.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function generateImage() {
+        const content = document.getElementById('input').value;
+        const title = document.getElementById('title-field').value;
+        if (!content.trim() && !title.trim()) { alert('テキストまたはタイトルを入力してください'); return; }
+
+        const statusArea = document.getElementById('image-status-area');
+        const statusP = document.getElementById('image-status');
+        const previewDiv = document.getElementById('image-preview');
+        statusP.textContent = '画像を生成中...';
+        statusArea.style.display = 'flex';
+        previewDiv.innerHTML = '';
+
+        try {
+            const payload = {
+                title: title, content: content,
+                metadata: {
+                    user: document.getElementById('user-select').value,
+                    feel: document.getElementById('feel-select').value,
+                    action: document.getElementById('action-select').value,
+                    ending: document.getElementById('ending-select').value,
+                },
+                tags: ['STP_v1']
+            };
+            const jsonPayload = JSON.stringify(payload);
+            const textEncoder = new TextEncoder();
+            const payloadBytes = textEncoder.encode(jsonPayload);
+            const fullPayloadLength = Steganographer.MAGIC_NUMBER.length + 4 + payloadBytes.length;
+            const requiredPixels = Math.ceil((fullPayloadLength * 8) / 3);
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            let notification = '';
+
+            const useUserImage = userBaseImage && (userBaseImage.width * userBaseImage.height >= requiredPixels);
+
+            if (useUserImage) {
+                const MAX_DIM = 1024;
+                let w = userBaseImage.width;
+                let h = userBaseImage.height;
+                if (w > h) {
+                    if (w > MAX_DIM) { h = Math.round(h * (MAX_DIM / w)); w = MAX_DIM; }
+                } else {
+                    if (h > MAX_DIM) { w = Math.round(w * (MAX_DIM / h)); h = MAX_DIM; }
+                }
+                canvas.width = w;
+                canvas.height = h;
+                ctx.drawImage(userBaseImage, 0, 0, w, h);
+            } else {
+                if (userBaseImage) {
+                    notification = '指定されたベース画像はデータ量に対して小さすぎるため、新しい画像を生成しました。';
+                }
+                const dimension = Math.ceil(Math.sqrt(requiredPixels));
+                canvas.width = dimension;
+                canvas.height = dimension;
+
+                const isLightTheme = document.body.classList.contains('light-theme');
+                const gradStart = isLightTheme ? '#e9ecef' : '#343a40';
+                const gradEnd = isLightTheme ? '#f8f9fa' : '#212529';
+                const gradient = ctx.createLinearGradient(0, 0, dimension, dimension);
+                gradient.addColorStop(0, gradStart);
+                gradient.addColorStop(1, gradEnd);
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, dimension, dimension);
+            }
+
+            await Steganographer.encode(canvas, jsonPayload);
+
+            canvas.toBlob(async (blob) => {
+                let pngData = new Uint8Array(await blob.arrayBuffer());
+                const fallbackText = document.getElementById('input').value;
+                if (fallbackText) {
+                    try {
+                        pngData = PNGUtils.insertTextChunk(pngData, 'SteganoData', fallbackText);
+                    } catch (e) {
+                        console.error("Failed to insert metadata chunk, continuing without it.", e);
+                    }
+                }
+                const finalBlob = new Blob([pngData], {type: 'image/png'});
+                const url = URL.createObjectURL(finalBlob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'text-image.png'; a.textContent = '画像をダウンロード'; a.classList.add('button');
+                const img = document.createElement('img');
+                img.src = url;
+                previewDiv.innerHTML = '';
+                previewDiv.appendChild(a);
+                previewDiv.appendChild(img);
+                statusP.textContent = '画像が生成されました。' + (notification ? ` (${notification})` : '');
+            }, 'image/png');
+        } catch (error) {
+            statusP.textContent = `エラー: ${error.message}`;
+            console.error(error);
+        }
+    }
+
+    async function processImage(imageElement) {
+        const statusArea = document.getElementById('image-status-area');
+        const statusP = document.getElementById('image-status');
+        const previewDiv = document.getElementById('image-preview');
+        try {
+            const jsonData = await Steganographer.decode(imageElement);
+            if (jsonData) {
+                const data = JSON.parse(jsonData);
+                document.getElementById('title-field').value = data.title || '';
+                document.getElementById('input').value = data.content || '';
+                if (data.metadata) {
+                    document.getElementById('user-select').value = data.metadata.user || '0';
+                    document.getElementById('feel-select').value = data.metadata.feel || '0';
+                    document.getElementById('action-select').value = data.metadata.action || '0';
+                    document.getElementById('ending-select').value = data.metadata.ending || '0';
+                }
+                updatePreview();
+                statusP.textContent = '画像からデータを正常に読み込みました。';
+            } else {
+                statusP.textContent = 'この画像には対応するデータが見つかりませんでした。';
+            }
+        } catch (e) {
+            statusP.textContent = 'データの読み込み中にエラーが発生しました。';
+            console.error(e);
+        }
+        previewDiv.innerHTML = '';
+        previewDiv.appendChild(imageElement);
+    }
+
+    async function loadImageFromFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const statusArea = document.getElementById('image-status-area');
+        const statusP = document.getElementById('image-status');
+        statusP.textContent = '画像を解析中...';
+        statusArea.style.display = 'flex';
+        const img = new Image();
+        img.onload = () => processImage(img);
+        img.onerror = () => { statusP.textContent = '画像の読み込みに失敗しました。'; };
+        img.src = URL.createObjectURL(file);
+    }
+
+    // --- INIT & EVENT LISTENERS ---
+
+    function restoreFromURL() {
+        const urlInput = document.getElementById('restore-url-input');
+        const url = urlInput.value.trim();
+        if (!url) {
+            alert('URLを入力してください。');
+            return;
+        }
+        try {
+            const hash = new URL(url).hash;
+            if (!hash) throw new Error('有効なハッシュが見つかりません。');
+            const parsedData = processor.parseShareableURL(hash);
+            if (parsedData) {
+                document.getElementById('title-field').value = parsedData.title || '';
+                document.getElementById('input').value = parsedData.text || '';
+                if (parsedData.metadata && expressionsData) {
+                    const userKey = Object.keys(expressionsData.users).find(key => expressionsData.users[key] === parsedData.metadata.user) || '0';
+                    const feelKey = Object.keys(expressionsData.feels).find(key => expressionsData.feels[key] === parsedData.metadata.feel) || '0';
+                    const actionKey = Object.keys(expressionsData.actions).find(key => expressionsData.actions[key] === parsedData.metadata.action) || '0';
+                    const endingKey = Object.keys(expressionsData.endings).find(key => expressionsData.endings[key] === parsedData.metadata.ending) || '0';
+                    document.getElementById('user-select').value = userKey;
+                    document.getElementById('feel-select').value = feelKey;
+                    document.getElementById('action-select').value = actionKey;
+                    document.getElementById('ending-select').value = endingKey;
+                }
+                updatePreview();
+                alert('URLからデータを復元しました。');
+            } else {
+                alert('URLの解析に失敗しました。形式が正しくない可能性があります。');
+            }
+        } catch (e) {
+            alert('無効なURLです: ' + e.message);
+        }
+    }
+
+    function setupEventListeners() {
+        document.getElementById('theme-toggle-btn').addEventListener('click', () => {
+            document.body.classList.toggle('light-theme');
+            localStorage.setItem('theme', document.body.classList.contains('light-theme') ? 'light' : 'dark');
+        });
+        document.getElementById('preview-btn').addEventListener('click', updatePreview);
+        document.getElementById('input').addEventListener('input', updatePreview);
+        document.getElementById('title-field').addEventListener('input', updatePreview);
+        document.querySelectorAll('select').forEach(s => s.addEventListener('change', updatePreview));
+        document.getElementById('generate-image-btn').addEventListener('click', generateImage);
+        document.getElementById('image-upload').addEventListener('change', loadImageFromFile);
+        document.getElementById('base-image-upload').addEventListener('change', handleBaseImageUpload);
+        document.getElementById('restore-from-url-btn').addEventListener('click', restoreFromURL);
+        document.getElementById('share-btn').addEventListener('click', generateShareURL);
+    }
+
+    async function generateShareURL() {
+        const text = document.getElementById('input').value;
+        const title = document.getElementById('title-field').value;
+        const useBase64 = document.querySelector('input[name="encoding"]:checked').value === 'base64';
+
+        if (!text.trim() && !title.trim()) {
+            alert('テキストまたはタイトルを入力してください。');
+            return;
+        }
+
+        const metadata = {
+            user: document.getElementById('user-select').value,
+            feel: document.getElementById('feel-select').value,
+            action: document.getElementById('action-select').value,
+            ending: document.getElementById('ending-select').value,
+        };
+
+        try {
+            const url = processor.createShareableURL(text, metadata, useBase64, title);
+            await navigator.clipboard.writeText(url);
+            alert('共有URLをクリップボードにコピーしました！');
+        } catch (error) {
+            console.error('共有URL生成エラー:', error);
+            alert(`URLの生成またはコピーに失敗しました。\n${error.message}`);
+        }
+    }
+
+    async function init() {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'light') {
+            document.body.classList.add('light-theme');
+        }
+        try {
+            expressionsData = await processor.loadExpressions();
+            processor.expressionsData = expressionsData;
+        } catch (error) {
+            console.error("Failed to load expressions:", error);
+            expressionsData = { users: {}, feels: {}, actions: {}, endings: {} };
+            processor.expressionsData = expressionsData;
+        }
+        populateSelects();
+        setupEventListeners();
+        updatePreview();
+    }
+
+    init();
+</script>
+</body>
+</html>
